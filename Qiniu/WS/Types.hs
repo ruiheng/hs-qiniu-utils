@@ -11,7 +11,6 @@ import qualified Data.Aeson                 as A
 import Control.Monad.Catch                  (MonadThrow, throwM)
 import Control.Applicative                  ((<$>), (<*>), (<|>))
 import Control.Monad                        (liftM)
-import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Network.HTTP.Client                  (HttpException)
 
 import Network.Wreq
@@ -70,4 +69,18 @@ respJsonGetByKey r k = do
         A.Success x -> return x
 
 -- | 服务器可能在 HTTP 层上出错，也可能在 API 报文内报错
+-- 这个类型方便分层处理错误
 type WsResult a = Either HttpException (Either WsError a)
+
+-- | 这个类型方便统一处理两种错误
+type WsResultP a = Either (Either HttpException WsError) a
+
+packError :: WsResult a -> WsResultP a
+packError (Left x)          = Left $ Left x
+packError (Right (Left x))  = Left $ Right x
+packError (Right (Right x)) = Right x
+
+unpackError :: WsResultP a -> WsResult a
+unpackError (Left (Left x))     = Left x
+unpackError (Left (Right x))    = Right (Left x)
+unpackError (Right x)           = Right (Right x)

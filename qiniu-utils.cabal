@@ -36,6 +36,8 @@ library
                      , text
                      , exceptions
                      , transformers
+                     , utf8-string
+                     , monad-logger
   -- hs-source-dirs:      
   default-language:    Haskell2010
   ghc-options:         -Wall
@@ -75,8 +77,10 @@ executable             qrsync
   build-depends:       base >=4.7 && <4.8
                      , bytestring
                      , qiniu-utils
-                     , optparse-applicative
+                     , optparse-applicative >= 0.10
                      , transformers
+                     , exceptions
+                     , monad-logger
 
   default-language:    Haskell2010
   ghc-options:         -Wall

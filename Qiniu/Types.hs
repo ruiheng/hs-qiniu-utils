@@ -10,6 +10,7 @@ import Data.ByteString                      (ByteString)
 import Data.Time                            (getCurrentTime, NominalDiffTime
                                             , addUTCTime)
 import Control.Monad.IO.Class               (MonadIO, liftIO)
+import Data.String                          (IsString)
 
 
 newtype Bucket = Bucket { unBucket :: String }
@@ -55,3 +56,6 @@ newtype SecretKey = SecretKey { unSecretKey :: ByteString }
 newtype AccessKey = AccessKey { unAccessKey :: ByteString }
                     deriving (Eq, Ord, Show)
 
+
+logSource :: IsString a => a
+logSource = "QiNiu"
