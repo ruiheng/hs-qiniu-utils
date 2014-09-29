@@ -94,7 +94,7 @@ parseOptions = RsyncOptions <$>
                         <> help "Verbose Level (0 - 3)")
 
 parseFileNames :: Parser [FilePath]
-parseFileNames = fmap nub $ many $ argument str $ metavar "FILES..."
+parseFileNames = fmap nub $ some $ argument str $ metavar "FILES..."
 
 uploadOneFile :: (MonadIO m, MonadThrow m, MonadLogger m) =>
     FilePath -> ReaderT RsyncOptions m ()
