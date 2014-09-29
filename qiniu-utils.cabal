@@ -81,6 +81,7 @@ executable             qrsync
                      , transformers
                      , exceptions
                      , monad-logger
+                     , fast-logger
 
   default-language:    Haskell2010
   ghc-options:         -Wall

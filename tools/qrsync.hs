@@ -8,7 +8,11 @@ import qualified Data.ByteString.Char8      as C8
 import Data.String                          (fromString)
 import Data.List                            (nub)
 import Control.Monad.Trans.Reader           (ReaderT(..), runReaderT, ask)
-import Control.Monad.Logger                 (MonadLogger, runStderrLoggingT)
+import Control.Monad.Logger                 (MonadLogger, runLoggingT, Loc
+                                            , LogLevel(..), defaultLogStr
+                                            , LogSource)
+import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
+                                            , defaultBufSize, LoggerSet, LogStr)
 import Control.Monad.Catch                  (MonadThrow)
 import Control.Monad.IO.Class               (MonadIO, liftIO)
 import Data.Maybe                           (listToMaybe, catMaybes)
@@ -32,6 +36,22 @@ data RsyncOptions = RsyncOptions {
                 , roVerbose         :: Int
                 }
                 deriving (Show)
+
+appLogger :: LoggerSet -> Int -> Loc -> LogSource -> LogLevel -> LogStr -> IO ()
+appLogger logger_set verbose loc src level ls = do
+    let should_log = case level of
+                        LevelOther {}   -> True
+                        _               -> level `elem` lv_by_v verbose
+
+    if should_log
+        then pushLogStr logger_set $ defaultLogStr loc src level ls
+        else return ()
+    where
+        lv_by_v lv
+            | lv <= 0   = [ LevelError]
+            | lv == 1   = [ LevelError, LevelWarn ]
+            | lv == 2   = [ LevelError, LevelWarn, LevelInfo ]
+            | otherwise = [ LevelError, LevelWarn, LevelInfo, LevelDebug ]
 
 byteSizeReader :: (Monad m, Num a, Eq a) => String -> m a
 byteSizeReader s = do
@@ -65,7 +85,8 @@ parseOptions = RsyncOptions <$>
                 <*> (optional $ option byteSizeReader
                         $ long "chunk" <> help "Chunk Size. e.g. 1024k 1m")
                 <*> (option auto
-                        $ long "verbose" <> short 'v' <> value 0 <> help "Verbose Level")
+                        $ long "verbose" <> short 'v' <> value 1
+                        <> help "Verbose Level (0 - 3)")
 
 parseFileNames :: Parser [FilePath]
 parseFileNames = fmap nub $ many $ argument str $ metavar "FILES..."
@@ -130,8 +151,15 @@ start fps = do
                                 mapM_ (uploadOneFileByBlock block_size chunk_size) fps
         _ -> mapM_ uploadOneFile fps
 
+start' :: RsyncOptions -> [FilePath] -> IO ()
+start' ro fps = do
+    logger_set <- newStderrLoggerSet defaultBufSize
+    runLoggingT
+        (runReaderT (start fps) ro)
+        (appLogger logger_set (roVerbose ro))
+
 main :: IO ()
-main = execParser opts >>= \(ro, fps) -> runStderrLoggingT (runReaderT (start fps) ro)
+main = execParser opts >>= uncurry start'
     where
         opts = info (helper <*> ((,) <$> parseOptions <*> parseFileNames))
                 (fullDesc
