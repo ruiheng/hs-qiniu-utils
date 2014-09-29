@@ -81,11 +81,16 @@ parseOptions = RsyncOptions <$>
                         strOption $ long "save-key" <> short 'S'
                             <> help "Resource Save Key")
                 <*> (optional $ option byteSizeReader
-                        $ long "block" <> help "Block Size. e.g. 1024k 1m")
+                        $ long "block"
+                        <> metavar "SIZE"
+                        <> help "Block Size. e.g. 1024k 1m")
                 <*> (optional $ option byteSizeReader
-                        $ long "chunk" <> help "Chunk Size. e.g. 1024k 1m")
+                        $ long "chunk"
+                        <> metavar "SIZE"
+                        <> help "Chunk Size. e.g. 1024k 1m")
                 <*> (option auto
                         $ long "verbose" <> short 'v' <> value 1
+                        <> metavar "LEVEL"
                         <> help "Verbose Level (0 - 3)")
 
 parseFileNames :: Parser [FilePath]
