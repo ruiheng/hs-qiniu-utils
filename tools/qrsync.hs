@@ -140,7 +140,7 @@ uploadOneFileByBlock block_size chunk_size fp = do
     let on_done offset cpr = do
             $(logInfo) $ fromString $
                 "block offset " ++ show offset
-                    ++ " chunk offset " ++ show (cprNextOffset cpr)
+                    ++ " chunk offset " ++ show (cprOffset cpr)
                     ++ " done."
     ws_result <- (liftIO $ LB.readFile fp)
                 >>= flip runReaderT upload_token

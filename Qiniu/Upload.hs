@@ -59,12 +59,17 @@ uploadOneShort m_key m_fp bs = runExceptT $ do
     rb <- ExceptT getr
     asWsResponseNormal' rb
 
+
 data ChunkPutResult = ChunkPutResult {
                     cprCtx              :: String
-                    , cprNextOffset     :: Int64
-                    , cprNextHost       :: String
+                    , cprOffset     :: Int64
+                    , cprHost       :: String
                 }
                 deriving (Eq, Show)
+
+$(AT.deriveJSON
+    AT.defaultOptions{AT.fieldLabelModifier = map toLower . drop 3}
+    ''ChunkPutResult)
 
 respJsonGetChunkPutResult :: (MonadThrow m) =>
     Response WsRespBodyNormal
@@ -117,16 +122,13 @@ uploadBput cpr bs = runExceptT $ do
     let opts = defaults & header "Content-Type" .~ [ "application/octet-stream" ]
                         & header "Authorization" .~
                                 [ fromString $ "UpToken " ++ upload_token ]
-        host = fixHost $ cprNextHost cpr
-        offset = cprNextOffset cpr
+        host = fixHost $ cprHost cpr
+        offset = cprOffset cpr
         ctx = cprCtx cpr
         url = host ++ "/bput/" ++ ctx ++ "/" ++ show offset
 
     $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
-    rb <- ExceptT $ liftIO $ try $ postWith opts url bs
-    runExceptT $ do
-        r <- ExceptT $ asWsResponseNormal rb
-        respJsonGetChunkPutResult r
+    (asWsResponseNormal' =<<) $ ExceptT $ liftIO $ try $ postWith opts url bs
 
 
 -- | Upload a whole block: repeatly call uploadBput
@@ -209,6 +211,6 @@ uploadByBlocks on_err on_done block_size chunk_size m_key bs = runExceptT $ do
     cprs <- go [] 0 bs
     ExceptT $ retryWsCall'' "uploadMkfile" (lift3 on_err) $
                 liftM packError $ uploadMkfile (LB.length bs) m_key
-                                    (cprNextHost $ head cprs)
+                                    (cprHost $ head cprs)
                                     (reverse $ map cprCtx cprs)
 
