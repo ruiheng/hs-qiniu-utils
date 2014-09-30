@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Main where
 
 import Prelude
@@ -10,9 +11,9 @@ import Data.List                            (nub)
 import Control.Monad.Trans.Reader           (ReaderT(..), runReaderT, ask)
 import Control.Monad.Logger                 (MonadLogger, runLoggingT, Loc
                                             , LogLevel(..), defaultLogStr
-                                            , LogSource)
+                                            , LogSource, logInfo)
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
-                                            , defaultBufSize, LoggerSet, LogStr)
+                                            , LoggerSet, LogStr)
 import Control.Monad.Catch                  (MonadThrow)
 import Control.Monad.IO.Class               (MonadIO, liftIO)
 import Data.Maybe                           (listToMaybe, catMaybes)
@@ -80,14 +81,16 @@ parseOptions = RsyncOptions <$>
                 <*> (optional $ fmap ResourceKey $
                         strOption $ long "save-key" <> short 'S'
                             <> help "Resource Save Key")
+                -- 实测证明：block size 只能是 4M，除非文件只分出一个 block
                 <*> (optional $ option byteSizeReader
                         $ long "block"
                         <> metavar "SIZE"
-                        <> help "Block Size. e.g. 1024k 1m")
+                        <> value (1024 * 1024 * 4)
+                        <> help "Block Size. e.g. 1024k 1m. N.B. Must be 4M (which is the default) for now")
                 <*> (optional $ option byteSizeReader
                         $ long "chunk"
                         <> metavar "SIZE"
-                        <> help "Chunk Size. e.g. 1024k 1m")
+                        <> help "Chunk Size. e.g. 1024k 1m. Specify a chunk size will activate incremental upload mode.")
                 <*> (option auto
                         $ long "verbose" <> short 'v' <> value 1
                         <> metavar "LEVEL"
@@ -133,9 +136,17 @@ uploadOneFileByBlock block_size chunk_size fp = do
     let pp = pp0
     let upload_token = uploadToken skey akey pp
     let rkey = Nothing
+
+    let on_done offset cpr = do
+            $(logInfo) $ fromString $
+                "block offset " ++ show offset
+                    ++ " chunk offset " ++ show (cprNextOffset cpr)
+                    ++ " done."
     ws_result <- (liftIO $ LB.readFile fp)
                 >>= flip runReaderT upload_token
-                        . (uploadByBlocks block_size chunk_size rkey)
+                        . (uploadByBlocks
+                            nopErrorReporter on_done
+                            block_size chunk_size rkey)
     liftIO $ do
         case unpackError ws_result of
             Left http_err -> do
@@ -158,7 +169,7 @@ start fps = do
 
 start' :: RsyncOptions -> [FilePath] -> IO ()
 start' ro fps = do
-    logger_set <- newStderrLoggerSet defaultBufSize
+    logger_set <- newStderrLoggerSet 0
     runLoggingT
         (runReaderT (start fps) ro)
         (appLogger logger_set (roVerbose ro))

@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Qiniu.Upload where
 
 import Prelude
@@ -74,6 +75,13 @@ fixHost host = if ("http://" `isPrefixOf` host) || ("https://" `isPrefixOf` host
                 else "http://" ++ host
 
 
+-- | callback with offset of the block
+type UploadOpDoneReporter m = Int64 -> ChunkPutResult -> m ()
+
+-- | callback without offset of the block
+type UploadOpDoneReporter' m = ChunkPutResult -> m ()
+
+
 uploadMkblk :: (MonadIO m, MonadThrow m, MonadLogger m) =>
     Int64               -- ^ block size
     -> LB.ByteString    -- ^ content of the file to uploaded
@@ -116,20 +124,37 @@ uploadBput cpr bs = runExceptT $ do
 
 -- | Upload a whole block: repeatly call uploadBput
 uploadOneBlock :: (MonadIO m, MonadThrow m, MonadLogger m) =>
-    Int64               -- ^ chunk size
+    ErrorReporter m
+    -> UploadOpDoneReporter' m
+    {-
+    -> Int64                -- ^ block size
+                            -- 这个参数是否必要依赖于七牛是否允许同一个文件
+                            -- 的一次上传过程中必须使用相同的 block size
+                            -- 如果不必使用相同的 block size，则直接取当前 block
+                            -- 的内容长度作为 block size 即可
+                            -- 实测证明：
+                            -- 文件最后一个block的大小可以小于4M
+                            -- 其它block的大小必须是 4M
+    -}
+    -> Int64                -- ^ chunk size
     -> LB.ByteString
     -> ReaderT String m (WsResultP ChunkPutResult)
-uploadOneBlock chunk_size bs = runExceptT $ do
+uploadOneBlock on_err on_done {-block_size-} chunk_size bs = runExceptT $ do
     let block_size = LB.length bs
     let (fst_bs, other_bs) = LB.splitAt chunk_size bs
-    cpr0 <- ExceptT $ liftM packError $ uploadMkblk block_size fst_bs
+    cpr0 <- ExceptT $ retryWsCall'' "uploadMkblk" (lift3 on_err) $
+                        liftM packError $ uploadMkblk block_size fst_bs
+    lift $ lift $ on_done cpr0
 
     if LB.null other_bs
         then return cpr0
         else do
             let go cpr bs_to_upload = do
                     let (bs1, bs2) = LB.splitAt chunk_size bs_to_upload
-                    new_cpr <- ExceptT $ liftM packError $ uploadBput cpr bs1
+                    new_cpr <- ExceptT $
+                                retryWsCall'' "uplodBput" (lift3 on_err) $
+                                        liftM packError $ uploadBput cpr bs1
+                    lift $ lift $ on_done new_cpr
                     if LB.null bs2
                         then return new_cpr
                         else go new_cpr bs2
@@ -160,26 +185,27 @@ uploadMkfile file_size m_key host ctx_list = runExceptT $ do
         return (hash, key)
 
 
-resumableError :: WsResultP a -> Bool
-resumableError = const False
-
-uploadByBlocks :: (MonadIO m, MonadThrow m, MonadLogger m) =>
-    Int64               -- ^ block size
+uploadByBlocks :: forall m. (MonadIO m, MonadThrow m, MonadLogger m) =>
+    ErrorReporter m
+    -> UploadOpDoneReporter m
+    -> Int64            -- ^ block size
     -> Int64            -- ^ chunk size
     -> Maybe ResourceKey
     -> LB.ByteString    -- ^ content of the file to uploaded
     -> ReaderT String m (WsResultP (ByteString, ResourceKey))
-uploadByBlocks block_size chunk_size m_key bs = runExceptT $ do
-    let go cpr_list bs_to_upload = do
+uploadByBlocks on_err on_done block_size chunk_size m_key bs = runExceptT $ do
+    let go cpr_list offset bs_to_upload = do
             let (bs1, bs2) = LB.splitAt block_size bs_to_upload
-            cpr <- ExceptT $ uploadOneBlock chunk_size bs1
+            cpr <- ExceptT $ uploadOneBlock
+                                on_err (on_done offset) chunk_size bs1
             let new_cpr_list = cpr : cpr_list
             if LB.null bs2
                 then return new_cpr_list
-                else go new_cpr_list bs2
+                else go new_cpr_list (offset + block_size) bs2
 
-    cprs <- go [] bs
-    ExceptT $ liftM packError $ uploadMkfile (LB.length bs) m_key
+    cprs <- go [] 0 bs
+    ExceptT $ retryWsCall'' "uploadMkfile" (lift3 on_err) $
+                liftM packError $ uploadMkfile (LB.length bs) m_key
                                     (cprNextHost $ head cprs)
                                     (reverse $ map cprCtx cprs)
 
