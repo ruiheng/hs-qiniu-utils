@@ -21,9 +21,11 @@ encodedSign skey = B64U.encode . sign skey
 encodedSign' :: SecretKey -> ByteString -> String
 encodedSign' skey = C8.unpack . encodedSign skey
 
-uploadToken :: SecretKey -> AccessKey -> PutPolicy -> String
+newtype UploadToken = UploadToken { unUploadToken :: String }
+
+uploadToken :: SecretKey -> AccessKey -> PutPolicy -> UploadToken
 uploadToken skey akey pp =
-    concat
+    UploadToken $ concat
         [ C8.unpack $ unAccessKey akey
         , ":"
         , encoded_sign

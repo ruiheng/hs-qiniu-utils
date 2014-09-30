@@ -36,6 +36,7 @@ library
                      , text
                      , exceptions
                      , transformers
+                     , mtl
                      , utf8-string
                      , monad-logger
                      , retry >= 0.5
@@ -80,6 +81,7 @@ executable             qrsync
                      , qiniu-utils
                      , optparse-applicative >= 0.10
                      , transformers
+                     , mtl
                      , exceptions
                      , monad-logger
                      , fast-logger

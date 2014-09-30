@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main where
 
 import Prelude
@@ -8,7 +9,8 @@ import qualified Data.ByteString.Lazy       as LB
 -- import qualified Data.ByteString.Char8      as C8
 import Data.String                          (fromString)
 import Data.List                            (nub)
-import Control.Monad.Trans.Reader           (ReaderT(..), runReaderT, ask)
+import Control.Monad.Trans.Reader           (ReaderT(..), runReaderT)
+import Control.Monad.Reader.Class           (ask)
 import Control.Monad.Logger                 (MonadLogger, runLoggingT, Loc
                                             , LogLevel(..), defaultLogStr
                                             , LogSource, logInfo)
