@@ -6,12 +6,13 @@ module Qiniu.Upload where
 import Prelude
 import qualified Data.Text                  as T
 import qualified Data.ByteString.Lazy       as LB
+import qualified Data.Aeson.TH              as AT
 -- import qualified Data.ByteString.Base64.URL as B64U
 -- import qualified Data.ByteString.Char8      as C8
 import Control.Applicative                  ((<$>))
 import Data.Maybe                           (catMaybes, fromMaybe)
 import Data.String                          (fromString)
-import Data.ByteString                      (ByteString)
+-- import Data.ByteString                      (ByteString)
 import qualified Data.ByteString.UTF8       as UTF8
 import Data.List                            (intersperse, isPrefixOf)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
@@ -21,6 +22,7 @@ import Control.Monad.IO.Class               (MonadIO, liftIO)
 import Control.Monad.Catch                  (MonadThrow, try)
 import Data.Monoid                          ((<>))
 import Data.Int                             (Int64)
+import Data.Char                            (toLower)
 import Control.Monad.Trans.Reader           (ReaderT(..), ask)
 import Control.Monad.Logger                 (MonadLogger, logDebugS)
 
@@ -31,12 +33,22 @@ import Control.Lens
 import Qiniu.Types
 import Qiniu.WS.Types
 
+data UploadedFileInfo = UploadedFileInfo {
+                            ufiHash     :: String
+                            , ufiKey    :: ResourceKey
+                        }
+                        deriving (Eq, Show)
+
+$(AT.deriveJSON
+    AT.defaultOptions{AT.fieldLabelModifier = map toLower . drop 3}
+    ''UploadedFileInfo)
+
 uploadOneShort ::
     (MonadIO m, MonadThrow m, MonadLogger m) =>
     Maybe ResourceKey
     -> Maybe FilePath   -- ^ optionally reveal the local file path
     -> LB.ByteString    -- ^ content of the file to uploaded
-    -> ReaderT String m (WsResult (ByteString, ResourceKey))
+    -> ReaderT String m (WsResult UploadedFileInfo)
 uploadOneShort m_key m_fp bs = runExceptT $ do
     upload_token <- lift ask
     let getr = liftIO $ try $ post "http://upload.qiniu.com/" $ catMaybes $
@@ -45,12 +57,7 @@ uploadOneShort m_key m_fp bs = runExceptT $ do
             , (partString "key" . unResourceKey ) <$> m_key
             ]
     rb <- ExceptT getr
-    runExceptT $ do
-        r <- ExceptT $ asWsResponseNormal rb
-        hash <- liftM fromString $ respJsonGetByKey r "hash"
-        key <- liftM ResourceKey $ respJsonGetByKey r "key"
-        return (hash, key)
-
+    asWsResponseNormal' rb
 
 data ChunkPutResult = ChunkPutResult {
                     cprCtx              :: String
@@ -166,7 +173,7 @@ uploadMkfile :: (MonadIO m, MonadThrow m, MonadLogger m) =>
     -> Maybe ResourceKey
     -> String               -- ^ last host
     -> [String]             -- ^ list of ctx
-    -> ReaderT String m (WsResult (ByteString, ResourceKey))
+    -> ReaderT String m (WsResult UploadedFileInfo)
 uploadMkfile file_size m_key host ctx_list = runExceptT $ do
     upload_token <- lift ask
     let opts = defaults & header "Content-Type" .~ [ "application/octet-stream" ]
@@ -178,11 +185,7 @@ uploadMkfile file_size m_key host ctx_list = runExceptT $ do
     $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
     rb <- ExceptT $ liftIO $ try $ postWith opts url $
                                     UTF8.fromString $ concat $ intersperse "," ctx_list
-    runExceptT $ do
-        r <- ExceptT $ asWsResponseNormal rb
-        hash <- liftM fromString $ respJsonGetByKey r "hash"
-        key <- liftM ResourceKey $ respJsonGetByKey r "key"
-        return (hash, key)
+    asWsResponseNormal' rb
 
 
 uploadByBlocks :: forall m. (MonadIO m, MonadThrow m, MonadLogger m) =>
@@ -192,7 +195,7 @@ uploadByBlocks :: forall m. (MonadIO m, MonadThrow m, MonadLogger m) =>
     -> Int64            -- ^ chunk size
     -> Maybe ResourceKey
     -> LB.ByteString    -- ^ content of the file to uploaded
-    -> ReaderT String m (WsResultP (ByteString, ResourceKey))
+    -> ReaderT String m (WsResultP UploadedFileInfo)
 uploadByBlocks on_err on_done block_size chunk_size m_key bs = runExceptT $ do
     let go cpr_list offset bs_to_upload = do
             let (bs1, bs2) = LB.splitAt block_size bs_to_upload

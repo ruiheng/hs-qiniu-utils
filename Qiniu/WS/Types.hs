@@ -12,6 +12,7 @@ import Control.Monad.Catch                  (MonadThrow, throwM)
 import Control.Applicative                  ((<$>), (<*>), (<|>))
 import Control.Monad                        (liftM)
 import Control.Monad.Trans.Class            (MonadTrans, lift)
+import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Network.HTTP.Client                  (HttpException)
 import Control.Retry                        (RetryPolicy, retrying
                                             , exponentialBackoff, limitRetries)
@@ -57,6 +58,15 @@ asWsResponseNormal rb = do
     return $ case r ^. responseBody of
         Left err -> Left err
         Right nb -> Right $ r & responseBody .~ nb
+
+asWsResponseNormal' :: (MonadThrow m, FromJSON a) =>
+    Response LB.ByteString
+    -> m (Either WsError a)
+asWsResponseNormal' rb = runExceptT $ do
+    r <- ExceptT $ asWsResponseNormal rb
+    case A.fromJSON $ A.toJSON $ r ^. responseBody of
+        A.Error err -> throwM $ JSONError err
+        A.Success x -> return x
 
 respJsonGetByKey :: (MonadThrow m, FromJSON a) =>
     Response WsRespBodyNormal

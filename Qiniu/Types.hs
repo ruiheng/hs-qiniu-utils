@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Qiniu.Types where
 
 import Prelude
 import Data.Time                            (UTCTime)
 import Data.Time.Clock.POSIX                (utcTimeToPOSIXSeconds)
-import Data.Aeson                           (ToJSON, toJSON, object, (.=))
+import Data.Aeson                           (FromJSON, ToJSON, toJSON, object, (.=))
 import Data.Int                             (Int64)
 import Data.ByteString                      (ByteString)
 import Data.Time                            (getCurrentTime, NominalDiffTime
@@ -17,7 +18,7 @@ newtype Bucket = Bucket { unBucket :: String }
                 deriving (Eq, Ord, Show)
 
 newtype ResourceKey = ResourceKey { unResourceKey :: String }
-                deriving (Eq, Ord, Show)
+                deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
 data Scope = Scope Bucket (Maybe ResourceKey)
                 deriving (Eq, Ord)

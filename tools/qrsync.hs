@@ -5,7 +5,7 @@ module Main where
 
 import Prelude
 import qualified Data.ByteString.Lazy       as LB
-import qualified Data.ByteString.Char8      as C8
+-- import qualified Data.ByteString.Char8      as C8
 import Data.String                          (fromString)
 import Data.List                            (nub)
 import Control.Monad.Trans.Reader           (ReaderT(..), runReaderT, ask)
@@ -119,10 +119,10 @@ uploadOneFile fp = do
                 hPutStrLn stderr $ "HTTP Error: " ++ show http_err
             Right (Left err) -> do
                 hPutStrLn stderr $ "Web Service Error: " ++ show err
-            Right (Right (etag, rrkey)) -> do
+            Right (Right (UploadedFileInfo etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
                 putStrLn $ "File '" ++ fp ++ "' uploaded to " ++ show scope
-                putStrLn $ "ETag: " ++ C8.unpack etag
+                putStrLn $ "ETag: " ++ etag
 
 uploadOneFileByBlock :: (MonadIO m, MonadThrow m, MonadLogger m) =>
     Int64 -> Int64 -> FilePath -> ReaderT RsyncOptions m ()
@@ -153,10 +153,10 @@ uploadOneFileByBlock block_size chunk_size fp = do
                 hPutStrLn stderr $ "HTTP Error: " ++ show http_err
             Right (Left err) -> do
                 hPutStrLn stderr $ "Web Service Error: " ++ show err
-            Right (Right (etag, rrkey)) -> do
+            Right (Right (UploadedFileInfo etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
                 putStrLn $ "File '" ++ fp ++ "' uploaded to " ++ show scope
-                putStrLn $ "ETag: " ++ C8.unpack etag
+                putStrLn $ "ETag: " ++ etag
 
 start :: (MonadIO m, MonadThrow m, MonadLogger m) =>
     [FilePath] -> ReaderT RsyncOptions m ()
