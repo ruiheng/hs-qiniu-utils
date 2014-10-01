@@ -13,7 +13,7 @@ import Control.Applicative                  ((<$>), (<*>), (<|>))
 import Control.Monad                        (liftM)
 import Control.Monad.Trans.Class            (MonadTrans, lift)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
-import Network.HTTP.Client                  (HttpException)
+import Network.HTTP.Client                  (HttpException(..))
 import Control.Retry                        (RetryPolicy, retrying
                                             , exponentialBackoff, limitRetries)
 import Control.Monad.IO.Class               (MonadIO)
@@ -126,7 +126,10 @@ retryWsCall can_retry policy call_ctx report_err = retrying policy need_retry
 -- 但现在没有足够的信息决定哪些错误情况适合重试
 -- 要根据以后调试过程的经验完善
 resumableError :: Int -> Either HttpException WsError -> Bool
-resumableError = const $ const False
+resumableError _ (Left ResponseTimeout)                 = True
+resumableError _ (Left (FailedConnectionException {}))  = True
+resumableError _ (Left (FailedConnectionException2 {})) = True
+resumableError _ _                                      = False
 
 retryWsCall' :: (MonadIO m) =>
     RetryPolicy
