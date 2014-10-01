@@ -40,6 +40,9 @@ library
                      , utf8-string
                      , monad-logger
                      , retry >= 0.5
+                     , monad-control
+                     , stm
+                     , async
   -- hs-source-dirs:      
   default-language:    Haskell2010
   ghc-options:         -Wall
@@ -85,6 +88,11 @@ executable             qrsync
                      , exceptions
                      , monad-logger
                      , fast-logger
+                     , yaml
+                     , containers
+                     , async
+                     , monad-control
+                     , directory
 
   default-language:    Haskell2010
   ghc-options:         -Wall

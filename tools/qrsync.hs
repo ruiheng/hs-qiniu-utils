@@ -2,11 +2,16 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
 import Prelude
 import qualified Data.ByteString.Lazy       as LB
--- import qualified Data.ByteString.Char8      as C8
+import qualified Data.ByteString            as B
+import qualified Data.Map                   as Map
+import qualified Data.Yaml                  as Y
+import qualified Data.ByteString.Char8      as C8
+import Data.ByteString                      (ByteString)
 import Data.String                          (fromString)
 import Data.List                            (nub)
 import Control.Monad.Trans.Reader           (ReaderT(..), runReaderT)
@@ -16,17 +21,26 @@ import Control.Monad.Logger                 (MonadLogger, runLoggingT, Loc
                                             , LogSource, logInfo)
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
                                             , LoggerSet, LogStr)
-import Control.Monad.Catch                  (MonadThrow)
+import Control.Monad.Catch                  (MonadThrow, catch, throwM)
 import Control.Monad.IO.Class               (MonadIO, liftIO)
-import Data.Maybe                           (listToMaybe, catMaybes)
+import Control.Monad                        (when)
+import Control.Monad.Trans.Control          (MonadBaseControl, liftBaseWith)
+import Data.Maybe                           (listToMaybe, catMaybes, fromMaybe)
 import Data.Int                             (Int64)
 import Numeric                              (readDec)
+import Control.Concurrent.Chan              (newChan, readChan, writeChan, Chan)
+import Control.Concurrent.Async             (async, wait)
 import Options.Applicative
 import System.IO
+import System.Exit
+import System.Directory                     (removeFile)
+import System.IO.Error                      (isDoesNotExistError)
+import Text.Printf                          (printf)
 
 import Qiniu.Types
 import Qiniu.WS.Types
 import Qiniu.Security
+import Qiniu.ByteString
 import Qiniu.Upload
 
 data RsyncOptions = RsyncOptions {
@@ -37,6 +51,8 @@ data RsyncOptions = RsyncOptions {
                 , roBlockSize       :: Maybe Int64
                 , roChunkSize       :: Maybe Int64
                 , roVerbose         :: Int
+                , roThreadNum       :: Int
+                , roContinueMode    :: Bool
                 }
                 deriving (Show)
 
@@ -97,6 +113,12 @@ parseOptions = RsyncOptions <$>
                         $ long "verbose" <> short 'v' <> value 1
                         <> metavar "LEVEL"
                         <> help "Verbose Level (0 - 3)")
+                <*> (option auto
+                        $ long "thread" <> short 't' <> value 1
+                        <> metavar "NUM"
+                        <> help "Thread number (default 1)")
+                <*> (switch $ long "coninue" <> short 'c'
+                            <> help "Coninue/Recover mode.")
 
 parseFileNames :: Parser [FilePath]
 parseFileNames = fmap nub $ some $ argument str $ metavar "FILES..."
@@ -126,7 +148,25 @@ uploadOneFile fp = do
                 putStrLn $ "File '" ++ fp ++ "' uploaded to " ++ show scope
                 putStrLn $ "ETag: " ++ etag
 
-uploadOneFileByBlock :: (MonadIO m, MonadThrow m, MonadLogger m) =>
+
+lookupStateFile :: (MonadIO m) =>
+    ByteString  -- ^ etag
+    -> m (FilePath, Maybe RecoverUploadInfo)
+lookupStateFile etag = liftIO $ do
+    let state_fp = ".up_state." ++ C8.unpack etag ++ ".yml"
+    err_or_rui <- Y.decodeFileEither state_fp
+    case err_or_rui of
+        Left _ -> return (state_fp, Nothing)
+        Right x -> return (state_fp, Just x)
+
+removeIfExists :: FilePath -> IO ()
+removeIfExists fileName = removeFile fileName `catch` handleExists
+  where handleExists e
+          | isDoesNotExistError e = return ()
+          | otherwise = throwM e
+
+uploadOneFileByBlock :: forall m.
+    (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m) =>
     Int64 -> Int64 -> FilePath -> ReaderT RsyncOptions m ()
 uploadOneFileByBlock block_size chunk_size fp = do
     ro <- ask
@@ -134,33 +174,87 @@ uploadOneFileByBlock block_size chunk_size fp = do
         akey    = roAccessKey ro
         bucket  = roBucket ro
         save_key = roResourceSaveKey ro
+        thread_num = roThreadNum ro
+        cr_mode     = roContinueMode ro
     pp0 <- mkPutPolicy bucket save_key (fromIntegral (3600*24 :: Int))
     let pp = pp0
     let upload_token = uploadToken skey akey pp
-    let rkey = Nothing
+    let rkey = Nothing      -- TODO: customize the resource key to save
 
+    bs <- liftIO $ LB.readFile fp
+    let etag = hetagL bs
+        empty_rui = RecoverUploadInfo [] block_size chunk_size rkey
+    (state_fp, m_rui) <- if cr_mode
+                            then lookupStateFile etag
+                            else return (".useless.yml", Nothing)
+    let last_rui = fromMaybe empty_rui m_rui
+
+    done_ch <- liftIO $ (newChan :: IO (Chan (Maybe (Int64, ChunkPutResult))))
     let on_done offset cpr = do
             $(logInfo) $ fromString $
                 "block offset " ++ show offset
                     ++ " chunk offset " ++ show (cprOffset cpr)
                     ++ " done."
-    ws_result <- (liftIO $ LB.readFile fp)
-                >>= flip runReaderT upload_token
-                        . (uploadByBlocks
-                            nopErrorReporter on_done
-                            block_size chunk_size rkey)
+            liftIO $ writeChan done_ch $ Just (offset, cpr)
+
+    let watch_ch state_file cpr_map = do
+            m_d <- liftIO $ readChan done_ch
+            case m_d of
+                Nothing -> do
+                    return ()
+                Just (offset, cpr) -> do
+                    let new_cpr_map = Map.insert
+                                        (offset `div` block_size) cpr
+                                        cpr_map
+                    let rui = cprMapToRecoverUploadInfo
+                                block_size chunk_size save_key new_cpr_map
+                    when cr_mode $ do
+                        liftIO $ B.writeFile state_file $ Y.encode rui
+                    let done_len = doneBytesLength $ map snd $ Map.toList new_cpr_map
+                        total_len = LB.length bs
+                    $(logInfo) $ fromString $
+                        show done_len
+                        <> " bytes of total "
+                        <> show total_len
+                        <> " has been uploaded. ("
+                        <> printf "%.02f" (fromIntegral (done_len * 100) / fromIntegral total_len :: Double)
+                        <> "%)"
+                    watch_ch state_file new_cpr_map
+
+    let init_map = Map.fromList $ catMaybes $
+                        zipWith (\x y -> fmap (x,) y) [0..] $ ruiBlockLastCPR last_rui
+    watcher <- liftBaseWith $ \run_in_base -> async $ run_in_base $
+                                                watch_ch state_fp
+                                                init_map
+    ws_result <- runReaderT (uploadByBlocksContinue
+                                nopErrorReporter on_done
+                                thread_num
+                                last_rui
+                                bs)
+                            upload_token
+
+    liftIO $ writeChan done_ch Nothing >> wait watcher >> return ()
+
     liftIO $ do
         case unpackError ws_result of
             Left http_err -> do
                 hPutStrLn stderr $ "HTTP Error: " ++ show http_err
             Right (Left err) -> do
                 hPutStrLn stderr $ "Web Service Error: " ++ show err
-            Right (Right (UploadedFileInfo etag rrkey)) -> do
+            Right (Right (UploadedFileInfo r_etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
                 putStrLn $ "File '" ++ fp ++ "' uploaded to " ++ show scope
-                putStrLn $ "ETag: " ++ etag
+                putStrLn $ "ETag: " ++ r_etag
 
-start :: (MonadIO m, MonadThrow m, MonadLogger m) =>
+                -- delete state file only server reports success
+                when cr_mode $ do
+                    removeIfExists state_fp
+
+                when (r_etag /= C8.unpack etag) $ do
+                    hPutStrLn stderr $ "etag mismatch"
+                    exitFailure
+
+start :: (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m) =>
     [FilePath] -> ReaderT RsyncOptions m ()
 start fps = do
     ro <- ask
