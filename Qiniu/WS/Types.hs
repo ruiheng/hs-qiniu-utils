@@ -14,8 +14,6 @@ import Control.Monad                        (liftM)
 import Control.Monad.Trans.Class            (MonadTrans, lift)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Network.HTTP.Client                  (HttpException(..))
-import Control.Retry                        (RetryPolicy, retrying
-                                            , exponentialBackoff, limitRetries)
 import Control.Monad.IO.Class               (MonadIO)
 import Data.Monoid                          ((<>))
 
@@ -106,22 +104,6 @@ type ErrorReporter m = String -> Int -> Either HttpException WsError -> m ()
 nopErrorReporter :: Monad m => ErrorReporter m
 nopErrorReporter _ _ _ = return ()
 
-retryWsCall :: (MonadIO m) =>
-    (Int -> Either HttpException WsError -> Bool)
-                                -- ^ a predict to tell if an error can be retry
-    -> RetryPolicy
-    -> String                   -- ^ context: error function and the like
-    -> ErrorReporter m
-    -> m (WsResultP a)
-    -> m (WsResultP a)
-retryWsCall can_retry policy call_ctx report_err = retrying policy need_retry
-    where
-        need_retry cnt x = do
-            case x of
-                Left err    -> report_err call_ctx cnt err >> return (can_retry cnt err)
-                _           -> return False
-
-
 -- | 这个函数预期行为是：决定远程调用是否可以重试
 -- 但现在没有足够的信息决定哪些错误情况适合重试
 -- 要根据以后调试过程的经验完善
@@ -131,22 +113,37 @@ resumableError _ (Left (FailedConnectionException {}))  = True
 resumableError _ (Left (FailedConnectionException2 {})) = True
 resumableError _ _                                      = False
 
-retryWsCall' :: (MonadIO m) =>
-    RetryPolicy
-    -> String                   -- ^ context: error function and the like
-    -> ErrorReporter m
-    -> m (WsResultP a)
-    -> m (WsResultP a)
-retryWsCall' = retryWsCall resumableError
+-- | used with retryWhile
+shouldRetryWsCall :: Monad m =>
+    (Int -> Either HttpException WsError -> m ())
+    -> Int
+    -> WsResultP a
+    -> m Bool
+shouldRetryWsCall on_err call_cnt result = do
+    case result of
+        Right _ -> return False
+        Left err -> do
+                    on_err call_cnt err
+                    return $ resumableError call_cnt err
 
-retryWsCall'' :: (MonadIO m) =>
-    String                      -- ^ context: error function and the like
+retryWsCall :: Monad m =>
+    String                   -- ^ context: error function and the like
     -> ErrorReporter m
     -> m (WsResultP a)
     -> m (WsResultP a)
-retryWsCall'' = retryWsCall' $ exponentialBackoff 100000 <> limitRetries 14
+retryWsCall func on_err = retryWhile (shouldRetryWsCall $ on_err func)
 
 ----------------------------------------------------------
+
+retryWhile :: Monad m => (Int -> a -> m Bool) -> m a -> m a
+retryWhile p f = go 1
+    where
+        go cnt = do
+            x <- f
+            b <- p cnt x
+            if b
+                then go (cnt + 1)
+                else return x
 
 lift3 :: (MonadTrans t, Monad m) =>
     (a -> b -> c -> m d)

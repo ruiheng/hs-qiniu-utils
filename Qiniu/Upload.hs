@@ -157,7 +157,7 @@ uploadOneBlock ::
 uploadOneBlock on_err on_done chunk_size bs = runExceptT $ do
     let block_size = LB.length bs
     let (fst_bs, other_bs) = LB.splitAt chunk_size bs
-    cpr0 <- ExceptT $ retryWsCall'' "uploadMkblk" on_err $
+    cpr0 <- ExceptT $ retryWsCall "uploadMkblk" on_err $
                         liftM packError $ uploadMkblk block_size fst_bs
     lift $ on_done cpr0
 
@@ -167,7 +167,7 @@ uploadOneBlock on_err on_done chunk_size bs = runExceptT $ do
             let go cpr bs_to_upload = do
                     let (bs1, bs2) = LB.splitAt chunk_size bs_to_upload
                     new_cpr <- ExceptT $
-                                retryWsCall'' "uplodBput" on_err $
+                                retryWsCall "uplodBput" on_err $
                                         liftM packError $ uploadBput cpr bs1
                     lift $ on_done new_cpr
                     if LB.null bs2
@@ -221,7 +221,7 @@ uploadByBlocks on_err on_done block_size chunk_size m_key bs = runExceptT $ do
                 else go new_cpr_list (offset + block_size) bs2
 
     cprs <- go [] 0 bs
-    ExceptT $ retryWsCall'' "uploadMkfile" on_err $
+    ExceptT $ retryWsCall "uploadMkfile" on_err $
                 liftM packError $ uploadMkfile (LB.length bs) m_key
                                     (cprHost $ head cprs)
                                     (reverse $ map cprCtx cprs)
@@ -296,7 +296,7 @@ uploadByBlocksContinue on_err on_done thread_num rui bs = runExceptT $ do
                     $ zip [0..] blk_cpr_list
 
     cprs <- threadPoolRun thread_num actions >>= either throwM return
-    ExceptT $ retryWsCall'' "uploadMkfile" on_err $
+    ExceptT $ retryWsCall "uploadMkfile" on_err $
                 liftM packError $ uploadMkfile (LB.length bs) m_key
                                     (cprHost $ last cprs)
                                     (map cprCtx cprs)
@@ -362,7 +362,7 @@ uploadOneBlockConinue on_err on_done block_size chunk_size bs idx m_cpr = runExc
                                         $ \s -> LB.take chunk_size $ LB.drop s bs
 
                         let bput x y = do
-                                    z <- ExceptT $ retryWsCall'' "uploadBput" on_err $
+                                    z <- ExceptT $ retryWsCall "uploadBput" on_err $
                                             liftM packError $ uploadBput x y
                                     lift $ on_done offset z
                                     return z

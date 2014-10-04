@@ -40,7 +40,6 @@ library
                      , mtl
                      , utf8-string
                      , monad-logger
-                     , retry >= 0.5
                      , monad-control
                      , stm
                      , async
