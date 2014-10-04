@@ -15,6 +15,10 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
+flag network-uri
+   description: Get Network.URI from the network-uri package
+   default: True
+
 library
   exposed-modules:     Qiniu.ByteString
                        Qiniu.Types
@@ -43,6 +47,13 @@ library
                      , monad-control
                      , stm
                      , async
+                     , split
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
+
   -- hs-source-dirs:      
   default-language:    Haskell2010
   ghc-options:         -Wall
@@ -60,6 +71,11 @@ test-suite test
                      , base16-bytestring
                      , aeson
                      , qiniu-utils
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
 
   default-language:    Haskell2010
 

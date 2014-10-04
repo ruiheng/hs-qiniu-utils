@@ -4,13 +4,11 @@ module Main where
 import Prelude
 import System.Exit
 import qualified Data.ByteString.Base64.URL as B64U
-import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Char8      as C8
-import qualified Data.Aeson                 as A
 import qualified Data.ByteString.Base16     as B16
+import Network.URI                          (unEscapeString)
 
-import Qiniu.Types
-import Qiniu.Security
+import Qiniu
 
 testPutPolicy :: IO ()
 testPutPolicy = do
@@ -24,7 +22,23 @@ testPutPolicy = do
     putStrLn $ "signed_test hex=" ++ C8.unpack (B16.encode $ sign (SecretKey "") "")
     putStrLn $ "signed_test hex=" ++ C8.unpack (B16.encode $ sign (SecretKey "key") "The quick brown fox jumps over the lazy dog")
 
+testEscapeKey :: IO ()
+testEscapeKey = do
+    go "/a//b/c"
+    go "/a//b/c/"
+    go "//a///b/c//"
+    where
+        go k = do
+            let path = keyToUrlPath (ResourceKey k)
+            if unEscapeString path /= ('/' : k)
+                then do
+                    putStrLn $ "key " ++ show k
+                                ++ " escape result is wrong: " ++ show path
+                    putStrLn $ show $ unEscapeString path
+                    exitFailure
+                else return ()
 
 main :: IO ()
 main = do
     testPutPolicy
+    testEscapeKey

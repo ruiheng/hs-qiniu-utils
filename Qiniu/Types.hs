@@ -12,6 +12,8 @@ import Data.Time                            (getCurrentTime, NominalDiffTime
                                             , addUTCTime)
 import Control.Monad.IO.Class               (MonadIO, liftIO)
 import Data.String                          (IsString)
+import Data.List.Split                      (splitWhen)
+import Network.URI                          (isUnreserved, escapeURIString)
 
 
 newtype Bucket = Bucket { unBucket :: String }
@@ -60,3 +62,29 @@ newtype AccessKey = AccessKey { unAccessKey :: ByteString }
 
 logSource :: IsString a => a
 logSource = "QiNiu"
+
+
+-- | 大部分时候，资源 key 的字串直接就可以拼接在 URL 里
+-- 但有些时候要做 url 转义
+-- 见 http://kb.qiniu.com/52slk76w
+-- 这些情况包括：
+-- 首字符是 /
+-- 连续出现的 /
+-- 其它特殊字符 ? & 之类
+-- 这些特殊情况是本来就应该避免的。
+-- 这里的算法与文档所述并不完全一致，但按逻辑推理应该是可用的。
+-- 这个函数的效果是让以下的恒等式成立。
+-- unEscapeString (keyToUrlPath (ResourceKey k)) == '/' : k
+keyToUrlPath :: ResourceKey -> String
+keyToUrlPath (ResourceKey key) = '/' : esc parts
+    where
+        parts = splitWhen (== '/') key
+
+        esc []      = ""
+        esc ("":[]) = ""
+        esc (x:xs)  =   let t = esc xs
+                            s = if null x
+                                    then "%2F"
+                                    else escapeURIString isUnreserved x ++
+                                            (if null t && xs /= [""] then "" else "/")
+                         in s ++ t
