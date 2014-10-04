@@ -21,6 +21,7 @@ library
                        Qiniu.Security
                        Qiniu.WS.Types
                        Qiniu.Upload
+                       Qiniu
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.8
