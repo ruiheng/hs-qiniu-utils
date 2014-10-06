@@ -132,7 +132,7 @@ uploadOneFile fp = do
         akey    = roAccessKey ro
         bucket  = roBucket ro
         save_key = roResourceSaveKey ro
-    pp0 <- mkPutPolicy bucket save_key (fromIntegral (3600*24 :: Int))
+    pp0 <- mkPutPolicy (Scope bucket Nothing) save_key (fromIntegral (3600*24 :: Int))
     let pp = pp0
     let upload_token = uploadToken skey akey pp
     let rkey = Nothing
@@ -177,7 +177,7 @@ uploadOneFileByBlock block_size chunk_size fp = do
         save_key = roResourceSaveKey ro
         thread_num = roThreadNum ro
         cr_mode     = roContinueMode ro
-    pp0 <- mkPutPolicy bucket save_key (fromIntegral (3600*24 :: Int))
+    pp0 <- mkPutPolicy (Scope bucket Nothing) save_key (fromIntegral (3600*24 :: Int))
     let pp = pp0
     let upload_token = uploadToken skey akey pp
     let rkey = Nothing      -- TODO: customize the resource key to save

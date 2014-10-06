@@ -36,6 +36,7 @@ instance ToJSON Scope where
 
 data PutPolicy = PutPolicy {
                     ppScope             :: Scope
+                    , ppSaveKey         :: Maybe ResourceKey
                     , ppDeadline        :: UTCTime
                 }
 
@@ -43,15 +44,19 @@ instance ToJSON PutPolicy where
     toJSON pp =
         object
             [ "scope"       .= ppScope pp
+            , "saveKey"     .= fmap unResourceKey (ppSaveKey pp)
             , "deadline"    .= (round $ utcTimeToPOSIXSeconds $ ppDeadline pp :: Int64)
             ]
 
 
-mkPutPolicy :: MonadIO m => Bucket -> Maybe ResourceKey -> NominalDiffTime -> m PutPolicy
-mkPutPolicy bucket m_key dt = liftIO $ do
+mkPutPolicy :: MonadIO m =>
+    Scope
+    -> Maybe ResourceKey    -- ^ the 'saveKey' field
+    -> NominalDiffTime -> m PutPolicy
+mkPutPolicy scope save_key dt = liftIO $ do
     now <- getCurrentTime
     let t = addUTCTime dt now
-    return $ PutPolicy (Scope bucket m_key) t
+    return $ PutPolicy scope save_key t
 
 newtype SecretKey = SecretKey { unSecretKey :: ByteString }
                     deriving (Eq, Ord, Show)
