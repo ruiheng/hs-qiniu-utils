@@ -2,6 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 module Qiniu.Upload where
 
 import Prelude
@@ -25,11 +26,12 @@ import Data.Monoid                          ((<>))
 import Data.Int                             (Int64)
 import Data.Char                            (toLower)
 import Control.Monad.Reader.Class           (MonadReader, ask)
-import Control.Monad.Logger                 (MonadLogger, logDebugS)
+import Control.Monad.Logger                 (MonadLogger, logDebugS, logInfoS)
 import Control.Monad.Trans.Control          (MonadBaseControl, liftBaseWith, restoreM)
 import Control.Concurrent.STM.TVar          (newTVarIO, readTVar, modifyTVar, writeTVar)
 import Control.Concurrent.STM               (atomically, check)
 import Control.Concurrent.Async             (async, waitCatch)
+import Control.Concurrent.Chan              (readChan, writeChan, Chan)
 import Control.Exception                    (SomeException)
 import Data.Map                             (Map)
 import qualified Data.Map                   as Map
@@ -149,7 +151,7 @@ uploadOneBlock ::
     ( MonadIO m, MonadThrow m, MonadLogger m
     , MonadReader UploadToken m
     ) =>
-    ErrorReporter m
+    OnWsCallError m
     -> UploadOpDoneReporter' m
     -> Int64                -- ^ chunk size
     -> LB.ByteString
@@ -203,7 +205,7 @@ uploadByBlocks :: forall m.
     ( MonadIO m, MonadThrow m, MonadLogger m
     , MonadReader UploadToken m
     ) =>
-    ErrorReporter m
+    OnWsCallError m
     -> UploadOpDoneReporter m
     -> Int64            -- ^ block size
     -> Int64            -- ^ chunk size
@@ -266,6 +268,13 @@ cprMapToRecoverUploadInfo block_size chunk_size m_key cpr_map =
                     else flip map [0..(fst $ Map.findMax cpr_map)] $ \idx ->
                             Map.lookup idx cpr_map
 
+cprMapFromRecoverUploadInfo ::
+    RecoverUploadInfo
+    -> Map Int64 ChunkPutResult
+cprMapFromRecoverUploadInfo rui =
+    Map.fromList $ catMaybes $
+        zipWith (\x y -> fmap (x,) y) [0..] $ ruiBlockLastCPR rui
+
 doneBytesLength :: [ChunkPutResult] -> Int64
 doneBytesLength lst = foldr ((+) . cprOffset) 0 lst
 
@@ -275,7 +284,7 @@ uploadByBlocksContinue :: forall m.
     , MonadBaseControl IO m
     , MonadReader UploadToken m
     ) =>
-    ErrorReporter m
+    OnWsCallError m
     -> UploadOpDoneReporter m
     -> Int
     -> RecoverUploadInfo
@@ -331,7 +340,7 @@ uploadOneBlockConinue ::
     ( MonadIO m, MonadThrow m, MonadLogger m
     , MonadReader UploadToken m
     ) =>
-    ErrorReporter m
+    OnWsCallError m
     -> UploadOpDoneReporter m
     -> Int64            -- ^ block size
     -> Int64            -- ^ chunk size
@@ -368,3 +377,31 @@ uploadOneBlockConinue on_err on_done block_size chunk_size bs idx m_cpr = runExc
                                     return z
 
                         foldM bput cpr0 offset_bs_list
+
+
+-- | 用一个 Chan 实现 UploadOpDoneReporter
+-- 需要另一个线程来处理 Chan 里的消息
+onDoneWriteChan :: (MonadIO m, MonadLogger m) =>
+    Chan (Maybe (Int64, ChunkPutResult))
+    -> UploadOpDoneReporter m
+onDoneWriteChan done_ch block_offset cpr = do
+    $(logInfoS) logSource $ fromString $
+        "block offset " ++ show block_offset
+            ++ " chunk offset " ++ show (cprOffset cpr)
+            ++ " done."
+    liftIO $ writeChan done_ch $ Just (block_offset, cpr)
+
+
+onDoneChanWatcher :: MonadIO m =>
+    Chan (Maybe (Int64, ChunkPutResult))
+    -> (Int64 -> ChunkPutResult -> m ())
+    -> m ()
+onDoneChanWatcher done_ch handle_msg = do
+    let go = do
+            m_d <- liftIO $ readChan done_ch
+            case m_d of
+                Nothing                     -> return ()
+                Just (block_offset, cpr)    -> do
+                    handle_msg block_offset cpr
+                    go
+    go

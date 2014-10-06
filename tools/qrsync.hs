@@ -11,6 +11,7 @@ import qualified Data.ByteString            as B
 import qualified Data.Map                   as Map
 import qualified Data.Yaml                  as Y
 import qualified Data.ByteString.Char8      as C8
+import qualified Control.Monad.Trans.State  as S
 import Data.ByteString                      (ByteString)
 import Data.String                          (fromString)
 import Data.List                            (nub)
@@ -28,7 +29,7 @@ import Control.Monad.Trans.Control          (MonadBaseControl, liftBaseWith)
 import Data.Maybe                           (listToMaybe, catMaybes, fromMaybe)
 import Data.Int                             (Int64)
 import Numeric                              (readDec)
-import Control.Concurrent.Chan              (newChan, readChan, writeChan, Chan)
+import Control.Concurrent.Chan              (newChan, writeChan, Chan)
 import Control.Concurrent.Async             (async, wait)
 import Options.Applicative
 import System.IO
@@ -190,44 +191,36 @@ uploadOneFileByBlock block_size chunk_size fp = do
     let last_rui = fromMaybe empty_rui m_rui
 
     done_ch <- liftIO $ (newChan :: IO (Chan (Maybe (Int64, ChunkPutResult))))
-    let on_done offset cpr = do
+    let on_done = onDoneWriteChan done_ch
+
+    let watch_ch state_file = onDoneChanWatcher done_ch $ \offset cpr -> do
+            cpr_map <- S.get
+            let new_cpr_map = Map.insert
+                                (offset `div` block_size) cpr
+                                cpr_map
+            let rui = cprMapToRecoverUploadInfo
+                        block_size chunk_size save_key new_cpr_map
+            when cr_mode $ do
+                liftIO $ B.writeFile state_file $ Y.encode rui
+            let done_len = doneBytesLength $ map snd $ Map.toList new_cpr_map
+                total_len = LB.length bs
             $(logInfo) $ fromString $
-                "block offset " ++ show offset
-                    ++ " chunk offset " ++ show (cprOffset cpr)
-                    ++ " done."
-            liftIO $ writeChan done_ch $ Just (offset, cpr)
+                show done_len
+                <> " bytes of total "
+                <> show total_len
+                <> " has been uploaded. ("
+                <> printf "%.02f" (fromIntegral (done_len * 100) / fromIntegral total_len :: Double)
+                <> "%)"
+            S.put new_cpr_map
 
-    let watch_ch state_file cpr_map = do
-            m_d <- liftIO $ readChan done_ch
-            case m_d of
-                Nothing -> do
-                    return ()
-                Just (offset, cpr) -> do
-                    let new_cpr_map = Map.insert
-                                        (offset `div` block_size) cpr
-                                        cpr_map
-                    let rui = cprMapToRecoverUploadInfo
-                                block_size chunk_size save_key new_cpr_map
-                    when cr_mode $ do
-                        liftIO $ B.writeFile state_file $ Y.encode rui
-                    let done_len = doneBytesLength $ map snd $ Map.toList new_cpr_map
-                        total_len = LB.length bs
-                    $(logInfo) $ fromString $
-                        show done_len
-                        <> " bytes of total "
-                        <> show total_len
-                        <> " has been uploaded. ("
-                        <> printf "%.02f" (fromIntegral (done_len * 100) / fromIntegral total_len :: Double)
-                        <> "%)"
-                    watch_ch state_file new_cpr_map
+    let init_map = cprMapFromRecoverUploadInfo last_rui
 
-    let init_map = Map.fromList $ catMaybes $
-                        zipWith (\x y -> fmap (x,) y) [0..] $ ruiBlockLastCPR last_rui
-    watcher <- liftBaseWith $ \run_in_base -> async $ run_in_base $
-                                                watch_ch state_fp
-                                                init_map
+    watcher <- liftBaseWith $ \run_in_base -> do
+                                async $ run_in_base $
+                                        S.runStateT (watch_ch state_fp) init_map
     ws_result <- runReaderT (uploadByBlocksContinue
-                                nopErrorReporter on_done
+                                (nopOnWsCallError 3)
+                                on_done
                                 thread_num
                                 last_rui
                                 bs)

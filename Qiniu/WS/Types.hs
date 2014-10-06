@@ -14,8 +14,6 @@ import Control.Monad                        (liftM)
 import Control.Monad.Trans.Class            (MonadTrans, lift)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Network.HTTP.Client                  (HttpException(..))
-import Control.Monad.IO.Class               (MonadIO)
-import Data.Monoid                          ((<>))
 
 import Network.Wreq
 import Control.Lens
@@ -99,10 +97,13 @@ unpackError (Left (Right x))    = Right (Left x)
 unpackError (Right x)           = Right (Right x)
 
 
-type ErrorReporter m = String -> Int -> Either HttpException WsError -> m ()
+-- | 根据 retryWsCall 的实现，这种函数不但实现错误报告
+-- 还可以实现错误时重试的时间间隔（直接 threadDelay）
+-- 返回值表示是否可以重试
+type OnWsCallError m = String -> Int -> Either HttpException WsError -> m Bool
 
-nopErrorReporter :: Monad m => ErrorReporter m
-nopErrorReporter _ _ _ = return ()
+nopOnWsCallError :: Monad m => Int -> OnWsCallError m
+nopOnWsCallError max_try _ call_cnt _ = return $ max_try > call_cnt
 
 -- | 这个函数预期行为是：决定远程调用是否可以重试
 -- 但现在没有足够的信息决定哪些错误情况适合重试
@@ -115,7 +116,7 @@ resumableError _ _                                      = False
 
 -- | used with retryWhile
 shouldRetryWsCall :: Monad m =>
-    (Int -> Either HttpException WsError -> m ())
+    (Int -> Either HttpException WsError -> m Bool)
     -> Int
     -> WsResultP a
     -> m Bool
@@ -123,12 +124,12 @@ shouldRetryWsCall on_err call_cnt result = do
     case result of
         Right _ -> return False
         Left err -> do
-                    on_err call_cnt err
-                    return $ resumableError call_cnt err
+                    b <- on_err call_cnt err
+                    return $ b && resumableError call_cnt err
 
 retryWsCall :: Monad m =>
     String                   -- ^ context: error function and the like
-    -> ErrorReporter m
+    -> OnWsCallError m
     -> m (WsResultP a)
     -> m (WsResultP a)
 retryWsCall func on_err = retryWhile (shouldRetryWsCall $ on_err func)
