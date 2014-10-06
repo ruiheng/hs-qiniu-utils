@@ -25,12 +25,12 @@ import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
 import Control.Monad.Catch                  (MonadThrow, catch, throwM)
 import Control.Monad.IO.Class               (MonadIO, liftIO)
 import Control.Monad                        (when)
-import Control.Monad.Trans.Control          (MonadBaseControl, liftBaseWith)
+import Control.Monad.Trans.Control          (MonadBaseControl, control)
 import Data.Maybe                           (listToMaybe, catMaybes, fromMaybe)
 import Data.Int                             (Int64)
 import Numeric                              (readDec)
 import Control.Concurrent.Chan              (newChan, writeChan, Chan)
-import Control.Concurrent.Async             (async, wait)
+import Control.Concurrent.Async             (withAsync, wait)
 import Options.Applicative
 import System.IO
 import System.Exit
@@ -215,18 +215,21 @@ uploadOneFileByBlock block_size chunk_size fp = do
 
     let init_map = cprMapFromRecoverUploadInfo last_rui
 
-    watcher <- liftBaseWith $ \run_in_base -> do
-                                async $ run_in_base $
-                                        S.runStateT (watch_ch state_fp) init_map
-    ws_result <- runReaderT (uploadByBlocksContinue
-                                (nopOnWsCallError 3)
-                                on_done
-                                thread_num
-                                last_rui
-                                bs)
-                            upload_token
+    ws_result <- control $ \run_in_base -> do
+                    withAsync
+                        (run_in_base $ S.runStateT (watch_ch state_fp) init_map)
+                        $ \watcher -> do
+                            ws_result <- run_in_base $ runReaderT
+                                                        (uploadByBlocksContinue
+                                                            (nopOnWsCallError 3)
+                                                            on_done
+                                                            thread_num
+                                                            last_rui
+                                                            bs)
+                                                        upload_token
 
-    liftIO $ writeChan done_ch Nothing >> wait watcher >> return ()
+                            writeChan done_ch Nothing >> wait watcher >> return ()
+                            return ws_result
 
     liftIO $ do
         case unpackError ws_result of
