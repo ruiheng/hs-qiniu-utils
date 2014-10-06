@@ -9,8 +9,8 @@ import Prelude
 import qualified Data.Text                  as T
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Aeson.TH              as AT
--- import qualified Data.ByteString.Base64.URL as B64U
--- import qualified Data.ByteString.Char8      as C8
+import qualified Data.ByteString.Base64.URL as B64U
+import qualified Data.ByteString.Char8      as C8
 import Control.Applicative                  ((<$>), (<*>))
 import Data.Maybe                           (catMaybes, fromMaybe)
 import Data.String                          (fromString)
@@ -193,7 +193,12 @@ uploadMkfile file_size m_key host ctx_list = runExceptT $ do
                         & header "Authorization" .~
                             [ fromString $ "UpToken " ++ unUploadToken upload_token ]
         url = fixHost host ++ "/mkfile/" ++ show file_size ++
-                (fromMaybe "" $ ("/key/" ++) . unResourceKey <$> m_key)
+                    (fromMaybe "" $ ("/key/" ++)
+                                    . C8.unpack
+                                    . B64U.encode
+                                    . UTF8.fromString
+                                    . unResourceKey
+                                    <$> m_key)
 
     $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
     rb <- ExceptT $ liftIO $ try $ postWith opts url $
