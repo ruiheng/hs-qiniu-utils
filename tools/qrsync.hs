@@ -73,8 +73,15 @@ appLogger logger_set verbose loc src level ls = do
             | lv == 2   = [ LevelError, LevelWarn, LevelInfo ]
             | otherwise = [ LevelError, LevelWarn, LevelInfo, LevelDebug ]
 
-byteSizeReader :: (Monad m, Num a, Eq a) => String -> m a
+byteSizeReader ::
+#if MIN_VERSION_optparse_applicative(0, 11, 0)
+    (Num a, Eq a) => ReadM a
+byteSizeReader = do
+    s <- str
+#else
+    (Monad m, Num a, Eq a) => String -> m a
 byteSizeReader s = do
+#endif
     maybe (fail "not a valid byte length") (return . (\(x,y) -> x * fromIntegral y)) $
         listToMaybe $
             catMaybes $
