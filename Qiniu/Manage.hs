@@ -78,3 +78,18 @@ delete secret_key access_key entry = runExceptT $ do
     where
         url_path    = "/delete/" <> encodedEntryUri entry
         req         = manageApiReqPost [] url_path
+
+copy :: (MonadIO m, MonadReader Manager m, MonadCatch m) =>
+    SecretKey
+    -> AccessKey
+    -> Entry        -- ^ from
+    -> Entry        -- ^ to
+    -> m (WsResult ())
+copy secret_key access_key entry_from entry_to = runExceptT $ do
+    mgmt <- ask
+    req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
+    asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+    where
+        url_path    = "/copy/" <> encodedEntryUri entry_from
+                                <> "/" <> encodedEntryUri entry_to
+        req         = manageApiReqPost [] url_path

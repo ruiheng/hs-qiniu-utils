@@ -59,6 +59,7 @@ parseOptions = ManageOptions <$>
 -- | 这个管理工具支持的所有命令
 data Command = Stat Entry
             | Delete Entry
+            | Copy Entry Entry
             deriving (Show)
 
 parseCommand :: CharParser (Maybe Command)
@@ -69,8 +70,9 @@ parseCommand = do
     if null cmd
         then return Nothing
         else case cmd of
-            "stat"  -> Just . Stat <$> p_entry
-            "delete"-> Just . Delete <$> p_entry
+            "stat"  -> Just . Stat <$> p_entry <* (TP.spaces >> TP.eof)
+            "delete"-> Just . Delete <$> p_entry <* (TP.spaces >> TP.eof)
+            "copy"  -> Just . uncurry Copy <$> p_two_entries <* (TP.spaces >> TP.eof)
             _       -> fail $ "unknown command: " ++ show cmd
     where
         p_bucket = do
@@ -83,9 +85,13 @@ parseCommand = do
             bucket <- p_bucket
             _ <- TP.char ':'
             rkey <- p_rkey
-            TP.spaces
-            _ <- TP.eof
             return $ (bucket, rkey)
+
+        p_two_entries = do
+            e1 <- p_entry
+            TP.spaces
+            e2 <- p_entry
+            return (e1, e2)
 
 
 cmdInCmdLineReader ::
@@ -144,6 +150,8 @@ processCmd secret_key access_key (Stat entry) = do
             print s
 processCmd secret_key access_key (Delete entry) = do
     (delete secret_key access_key entry) >>= printResult (const $ return ())
+processCmd secret_key access_key (Copy entry_from entry_to) = do
+    (copy secret_key access_key entry_from entry_to) >>= printResult (const $ return ())
 
 
 interactive ::
