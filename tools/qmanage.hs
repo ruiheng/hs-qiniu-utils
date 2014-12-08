@@ -58,6 +58,7 @@ parseOptions = ManageOptions <$>
 
 -- | 这个管理工具支持的所有命令
 data Command = Stat Entry
+            | Delete Entry
             deriving (Show)
 
 parseCommand :: CharParser (Maybe Command)
@@ -68,7 +69,8 @@ parseCommand = do
     if null cmd
         then return Nothing
         else case cmd of
-            "stat"  -> Just <$> p_stat
+            "stat"  -> Just . Stat <$> p_entry
+            "delete"-> Just . Delete <$> p_entry
             _       -> fail $ "unknown command: " ++ show cmd
     where
         p_bucket = do
@@ -77,13 +79,13 @@ parseCommand = do
         p_rkey = do
             fmap ResourceKey $ TP.many1 $ TP.satisfy (not . isSpace)
 
-        p_stat = do
+        p_entry = do
             bucket <- p_bucket
             _ <- TP.char ':'
             rkey <- p_rkey
             TP.spaces
             _ <- TP.eof
-            return $ Stat (bucket, rkey)
+            return $ (bucket, rkey)
 
 
 cmdInCmdLineReader ::
@@ -131,6 +133,7 @@ printResult f ws_result = do
         Right (Right x) -> do
             f x
 
+
 processCmd ::
     (MonadIO m, MonadReader Manager m, MonadCatch m) =>
     SecretKey -> AccessKey -> Command -> m ()
@@ -139,6 +142,9 @@ processCmd secret_key access_key (Stat entry) = do
     where
         f s = liftIO $ do
             print s
+processCmd secret_key access_key (Delete entry) = do
+    (delete secret_key access_key entry) >>= printResult (const $ return ())
+
 
 interactive ::
     (MonadIO m, MonadReader Manager m, MonadCatch m) =>

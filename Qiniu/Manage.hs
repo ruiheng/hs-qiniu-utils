@@ -16,7 +16,9 @@ import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Control.Monad.Reader.Class           (MonadReader, ask)
 import Control.Monad.Catch                  (MonadCatch, try)
 import Data.String                          (IsString)
-import Network.HTTP.Client                  (httpLbs, Request, Manager, host, path)
+import Network.HTTP.Client                  ( httpLbs, Request, Manager, host, path
+                                            , urlEncodedBody
+                                            )
 
 import Qiniu.Utils                          ( lowerFirst
                                             , ServerTimeStamp(..), UrlSafeEncoded(..)
@@ -33,6 +35,10 @@ manageApiReqGet uri_path =
     def { host = manageApiHost
         , path = uri_path
         }
+
+manageApiReqPost :: [(ByteString, ByteString)] -> ByteString -> Request
+manageApiReqPost post_params uri_path =
+    urlEncodedBody post_params $ manageApiReqGet uri_path
 
 
 data EntryStat = EntryStat {
@@ -59,3 +65,16 @@ stat secret_key access_key entry = runExceptT $ do
     where
         url_path    = "/stat/" <> encodedEntryUri entry
         req         = manageApiReqGet url_path
+
+
+delete :: (MonadIO m, MonadReader Manager m, MonadCatch m) =>
+    SecretKey
+    -> AccessKey
+    -> Entry -> m (WsResult ())
+delete secret_key access_key entry = runExceptT $ do
+    mgmt <- ask
+    req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
+    asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+    where
+        url_path    = "/delete/" <> encodedEntryUri entry
+        req         = manageApiReqPost [] url_path

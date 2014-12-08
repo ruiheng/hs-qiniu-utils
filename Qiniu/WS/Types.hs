@@ -46,6 +46,17 @@ asWsResponse :: (MonadThrow m) => Response LB.ByteString -> m WsResponse
 asWsResponse = asJSON
 
 
+asWsResponseEmpty :: (MonadThrow m) =>
+    Response LB.ByteString
+    -> m (Either WsError ())
+asWsResponseEmpty rb = runExceptT $ do
+    if LB.null (rb ^. responseBody)
+        then return ()
+        else do
+            _ <- ExceptT $ asWsResponseNormal rb
+            -- 本预期没有任何响应，但实际上又有，暂时忽略它
+            return ()
+
 asWsResponseNormal :: (MonadThrow m) =>
     Response LB.ByteString
     -> m (Either WsError (Response WsRespBodyNormal))
