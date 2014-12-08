@@ -60,6 +60,7 @@ parseOptions = ManageOptions <$>
 data Command = Stat Entry
             | Delete Entry
             | Copy Entry Entry
+            | Move Entry Entry
             deriving (Show)
 
 parseCommand :: CharParser (Maybe Command)
@@ -73,6 +74,7 @@ parseCommand = do
             "stat"  -> Just . Stat <$> p_entry <* (TP.spaces >> TP.eof)
             "delete"-> Just . Delete <$> p_entry <* (TP.spaces >> TP.eof)
             "copy"  -> Just . uncurry Copy <$> p_two_entries <* (TP.spaces >> TP.eof)
+            "move"  -> Just . uncurry Move <$> p_two_entries <* (TP.spaces >> TP.eof)
             _       -> fail $ "unknown command: " ++ show cmd
     where
         p_bucket = do
@@ -152,6 +154,8 @@ processCmd secret_key access_key (Delete entry) = do
     (delete secret_key access_key entry) >>= printResult (const $ return ())
 processCmd secret_key access_key (Copy entry_from entry_to) = do
     (copy secret_key access_key entry_from entry_to) >>= printResult (const $ return ())
+processCmd secret_key access_key (Move entry_from entry_to) = do
+    (move secret_key access_key entry_from entry_to) >>= printResult (const $ return ())
 
 
 interactive ::
