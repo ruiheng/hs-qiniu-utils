@@ -3,6 +3,8 @@
 module Qiniu.Types where
 
 import Prelude
+import qualified Data.ByteString.Base64.URL as B64U
+
 import Data.Time                            (UTCTime)
 import Data.Time.Clock.POSIX                (utcTimeToPOSIXSeconds)
 import Data.Aeson                           (FromJSON, ToJSON, toJSON, object, (.=))
@@ -13,6 +15,7 @@ import Data.Time                            (getCurrentTime, NominalDiffTime
 import Control.Monad.IO.Class               (MonadIO, liftIO)
 import Data.String                          (IsString)
 import Data.List.Split                      (splitWhen)
+import Data.String                          (fromString)
 import Network.URI                          (isUnreserved, escapeURIString)
 
 
@@ -33,6 +36,15 @@ instance Show Scope where
 
 instance ToJSON Scope where
     toJSON = toJSON . show
+
+
+type Entry = (Bucket, ResourceKey)
+
+encodedEntryUri :: Entry -> ByteString
+encodedEntryUri (bucket, key) =
+    B64U.encode $ fromString $ unBucket bucket ++ ":" ++ unResourceKey key
+
+
 
 data PutPolicy = PutPolicy {
                     ppScope             :: Scope
@@ -62,6 +74,9 @@ newtype SecretKey = SecretKey { unSecretKey :: ByteString }
                     deriving (Eq, Ord, Show)
 
 newtype AccessKey = AccessKey { unAccessKey :: ByteString }
+                    deriving (Eq, Ord, Show)
+
+newtype AccessToken = AccessToken { unAccessToken :: ByteString }
                     deriving (Eq, Ord, Show)
 
 
