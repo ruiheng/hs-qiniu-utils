@@ -5,6 +5,7 @@ module Qiniu.Manage where
 
 import Prelude
 import qualified Data.Aeson.TH              as AT
+import qualified Data.ByteString.Base64.URL as B64U
 
 import Data.Int                             (Int64)
 import Data.ByteString                      (ByteString)
@@ -109,4 +110,20 @@ move secret_key access_key entry_from entry_to = runExceptT $ do
     where
         url_path    = "/move/" <> encodedEntryUri entry_from
                                 <> "/" <> encodedEntryUri entry_to
+        req         = manageApiReqPost [] url_path
+
+
+chgm :: (MonadIO m, MonadReader Manager m, MonadCatch m) =>
+    SecretKey
+    -> AccessKey
+    -> Entry
+    -> ByteString
+    -> m (WsResult ())
+chgm secret_key access_key entry mime = runExceptT $ do
+    mgmt <- ask
+    req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
+    asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+    where
+        url_path    = "/chgm/" <> encodedEntryUri entry
+                                <> "/mime/" <> B64U.encode mime
         req         = manageApiReqPost [] url_path

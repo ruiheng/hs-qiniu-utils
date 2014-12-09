@@ -4,13 +4,14 @@
 module Main where
 
 import Prelude
--- import qualified Data.ByteString.Char8      as C8
+import qualified Data.ByteString.Char8      as C8
 
 import Options.Applicative
 import System.IO
 import System.IO.Error                      (isEOFError)
 
 import Data.String                          (fromString)
+import Data.ByteString                      (ByteString)
 import Control.Monad.Logger                 (MonadLogger, runLoggingT, Loc
                                             , LogLevel(..), defaultLogStr
                                             , LogSource, logInfo)
@@ -23,6 +24,8 @@ import Control.Monad.Trans.Reader           (ReaderT(..), runReaderT)
 import Control.Monad.Reader                 (MonadReader, ask)
 
 import qualified Text.Parsec                as TP
+import qualified Text.Parsec.Token          as TPT
+import Text.Parsec.Language                 (haskellDef)
 import Data.Char                            (isSpace, isAlphaNum)
 import Control.Monad                        (void)
 import Network.HTTP.Client                  (withManager, Manager
@@ -61,6 +64,7 @@ data Command = Stat Entry
             | Delete Entry
             | Copy Entry Entry
             | Move Entry Entry
+            | ChangeMime Entry ByteString
             deriving (Show)
 
 parseCommand :: CharParser (Maybe Command)
@@ -75,6 +79,7 @@ parseCommand = do
             "delete"-> Just . Delete <$> p_entry <* (TP.spaces >> TP.eof)
             "copy"  -> Just . uncurry Copy <$> p_two_entries <* (TP.spaces >> TP.eof)
             "move"  -> Just . uncurry Move <$> p_two_entries <* (TP.spaces >> TP.eof)
+            "chgm"  -> Just <$> p_chgm
             _       -> fail $ "unknown command: " ++ show cmd
     where
         p_bucket = do
@@ -94,6 +99,21 @@ parseCommand = do
             TP.spaces
             e2 <- p_entry
             return (e1, e2)
+
+        p_chgm = do
+            e <- p_entry
+            TP.spaces
+            mime <- p_mime
+            return $ ChangeMime e (C8.pack mime)
+
+        p_mime = do
+            c <- TP.lookAhead TP.anyChar
+            if c == '"'
+                then quoted_string
+                else TP.many1 $ TP.satisfy (not . isSpace)
+
+        lexer = TPT.makeTokenParser haskellDef
+        quoted_string = TPT.stringLiteral lexer
 
 
 cmdInCmdLineReader ::
@@ -156,6 +176,8 @@ processCmd secret_key access_key (Copy entry_from entry_to) = do
     (copy secret_key access_key entry_from entry_to) >>= printResult (const $ return ())
 processCmd secret_key access_key (Move entry_from entry_to) = do
     (move secret_key access_key entry_from entry_to) >>= printResult (const $ return ())
+processCmd secret_key access_key (ChangeMime entry mime) = do
+    (chgm secret_key access_key entry mime) >>= printResult (const $ return ())
 
 
 interactive ::
