@@ -31,6 +31,8 @@ import Control.Monad                        (void)
 import Network.HTTP.Client                  (withManager, Manager
                                             , defaultManagerSettings
                                             )
+import Data.Conduit                         (($$))
+import qualified Data.Conduit.List          as CL
 
 import Qiniu.Types
 import Qiniu.WS.Types
@@ -65,6 +67,7 @@ data Command = Stat Entry
             | Copy Entry Entry
             | Move Entry Entry
             | ChangeMime Entry ByteString
+            | List Bucket String
             deriving (Show)
 
 parseCommand :: CharParser (Maybe Command)
@@ -79,7 +82,8 @@ parseCommand = do
             "delete"-> Just . Delete <$> p_entry <* (TP.spaces >> TP.eof)
             "copy"  -> Just . uncurry Copy <$> p_two_entries <* (TP.spaces >> TP.eof)
             "move"  -> Just . uncurry Move <$> p_two_entries <* (TP.spaces >> TP.eof)
-            "chgm"  -> Just <$> p_chgm
+            "chgm"  -> Just <$> p_chgm <* (TP.spaces >> TP.eof)
+            "list"  -> Just <$> p_list <* (TP.spaces >> TP.eof)
             _       -> fail $ "unknown command: " ++ show cmd
     where
         p_bucket = do
@@ -106,7 +110,15 @@ parseCommand = do
             mime <- p_mime
             return $ ChangeMime e (C8.pack mime)
 
-        p_mime = do
+        p_list = do
+            b <- p_bucket
+            TP.spaces
+            prefix <- p_maybe_quoted_s
+            return $ List b prefix
+
+        p_mime = p_maybe_quoted_s
+
+        p_maybe_quoted_s = do
             c <- TP.lookAhead TP.anyChar
             if c == '"'
                 then quoted_string
@@ -168,8 +180,7 @@ processCmd ::
 processCmd secret_key access_key (Stat entry) = do
     (stat secret_key access_key entry) >>= printResult f
     where
-        f s = liftIO $ do
-            print s
+        f = liftIO . print
 processCmd secret_key access_key (Delete entry) = do
     (delete secret_key access_key entry) >>= printResult (const $ return ())
 processCmd secret_key access_key (Copy entry_from entry_to) = do
@@ -178,6 +189,12 @@ processCmd secret_key access_key (Move entry_from entry_to) = do
     (move secret_key access_key entry_from entry_to) >>= printResult (const $ return ())
 processCmd secret_key access_key (ChangeMime entry mime) = do
     (chgm secret_key access_key entry mime) >>= printResult (const $ return ())
+processCmd secret_key access_key (List bucket prefix) = do
+    (tryWsResult $ listSource secret_key access_key bucket 1 "/" prefix $$ CL.consume)
+        >>= printResult f . unpackError
+    where
+        f s = liftIO $ do
+                print s
 
 
 interactive ::

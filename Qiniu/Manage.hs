@@ -15,11 +15,13 @@ import Data.Monoid                          ((<>))
 import Control.Monad.IO.Class               (MonadIO, liftIO)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Control.Monad.Reader.Class           (MonadReader, ask)
-import Control.Monad.Catch                  (MonadCatch, try)
-import Data.String                          (IsString)
+import Control.Monad.Catch                  (MonadCatch, try, throwM)
+import Data.String                          (IsString, fromString)
 import Network.HTTP.Client                  ( httpLbs, Request, Manager, host, path
-                                            , urlEncodedBody
+                                            , urlEncodedBody, setQueryString
                                             )
+import Data.Conduit                         (Source, yield)
+import Data.Maybe                           (fromMaybe)
 
 import Qiniu.Utils                          ( lowerFirst
                                             , ServerTimeStamp(..), UrlSafeEncoded(..)
@@ -28,6 +30,8 @@ import Qiniu.Types
 import Qiniu.Security
 import Qiniu.WS.Types
 
+-- | 缺省的接口服务器。
+-- 注意，不和为何，不是所有接口都使用相同的接口服务器。
 manageApiHost :: IsString a => a
 manageApiHost = "rs.qiniu.com"
 
@@ -127,3 +131,75 @@ chgm secret_key access_key entry mime = runExceptT $ do
         url_path    = "/chgm/" <> encodedEntryUri entry
                                 <> "/mime/" <> B64U.encode mime
         req         = manageApiReqPost [] url_path
+
+
+data ListItem = ListItem {
+                    liKey           :: String
+                    , liPutTime     :: ServerTimeStamp
+                    , liHash        :: UrlSafeEncoded
+                    , liFsize       :: Int64
+                    , liMimeType    :: String
+                    , liCustomer    :: Maybe String
+                }
+                deriving (Show)
+$(AT.deriveJSON
+    AT.defaultOptions{AT.fieldLabelModifier = lowerFirst . drop 2}
+    ''ListItem)
+
+data ListResult = ListResult {
+                    lrMarker                :: Maybe String
+                    , lrCommonPrefixes      :: Maybe [String]
+                    , lrItems               :: [ListItem]
+                    }
+                    deriving (Show)
+$(AT.deriveJSON
+    AT.defaultOptions{AT.fieldLabelModifier = lowerFirst . drop 2}
+    ''ListResult)
+
+list :: (MonadIO m, MonadReader Manager m, MonadCatch m) =>
+    SecretKey
+    -> AccessKey
+    -> Bucket
+    -> Int          -- ^ limit
+    -> String       -- ^ delimiter
+    -> String       -- ^ prefix
+    -> String       -- ^ marker
+    -> m (WsResult ListResult)
+list secret_key access_key bucket limit delimiter prefix marker =
+    runExceptT $ do
+        mgmt <- ask
+        req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
+        asWsResponseNormal' =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+    where
+        url_path    = "/list"
+        req         = setQueryString
+                        [ ("bucket",    Just (fromString $ unBucket bucket))
+                        , ("limit",     Just (fromString $ show $
+                                                    min 1000 $ max 1 limit))
+                        , ("prefix",    Just (fromString prefix))
+                        , ("delimiter", Just (fromString delimiter))
+                        , ("marker",    Just (fromString marker))
+                        ]
+                        $ (manageApiReqPost [] url_path) { host = "rsf.qbox.me" }
+
+
+listSource :: (MonadIO m, MonadReader Manager m, MonadCatch m) =>
+    SecretKey
+    -> AccessKey
+    -> Bucket
+    -> Int          -- ^ limit
+    -> String       -- ^ delimiter
+    -> String       -- ^ prefix
+    -> Source m ListResult
+                    -- ^ may throw HttpException or WsError
+listSource secret_key access_key bucket limit delimiter prefix = do
+    go ""
+    where
+        go marker = do
+            lr <- list secret_key access_key bucket limit delimiter prefix marker
+                    >>= either (either throwM throwM) return . packError
+            yield lr
+            let new_marker = fromMaybe "" $ lrMarker lr
+            if null new_marker
+                then return ()
+                else go new_marker
