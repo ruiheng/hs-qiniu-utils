@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Qiniu.WS.Types where
 
 import Prelude
@@ -8,12 +9,14 @@ import qualified Data.Map                   as Map
 import Data.Aeson                           (Value, withObject, (.:)
                                             , FromJSON, parseJSON)
 import qualified Data.Aeson                 as A
-import Control.Monad.Catch                  (MonadThrow, throwM)
+import Control.Monad.Catch                  (MonadThrow, throwM, catch, MonadCatch)
 import Control.Applicative                  ((<$>), (<*>), (<|>))
 import Control.Monad                        (liftM)
 import Control.Monad.Trans.Class            (MonadTrans, lift)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Network.HTTP.Client                  (HttpException(..))
+import Data.Typeable                        (Typeable)
+import Control.Exception                    (Exception)
 
 import Network.Wreq
 import Control.Lens
@@ -24,8 +27,9 @@ data WsError = WsError {
                     wsHttpCode :: Int
                     , wsErrMsg :: String
                 }
-                deriving (Eq, Show)
+                deriving (Eq, Show, Typeable)
 
+instance Exception WsError
 
 instance FromJSON WsError where
     parseJSON = withObject "WsError" $ \obj -> do
@@ -107,6 +111,12 @@ unpackError (Left (Left x))     = Left x
 unpackError (Left (Right x))    = Right (Left x)
 unpackError (Right x)           = Right (Right x)
 
+tryWsResult :: MonadCatch m => m a -> m (WsResultP a)
+tryWsResult f = do
+    liftM Right f `catch` h1 `catch` h2
+    where
+        h1 = return . Left . Left
+        h2 = return . Left . Right
 
 -- | 根据 retryWsCall 的实现，这种函数不但实现错误报告
 -- 还可以实现错误时重试的时间间隔（直接 threadDelay）
