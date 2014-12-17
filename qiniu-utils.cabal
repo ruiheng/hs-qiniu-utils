@@ -19,6 +19,14 @@ flag network-uri
    description: Get Network.URI from the network-uri package
    default: True
 
+Flag library-only
+    Description:   Build for library only
+    Default:       False
+
+Flag dev
+    Description:   Turn on development settings, like disable optimization.
+    Default:       True
+
 library
   exposed-modules:     Qiniu.ByteString
                        Qiniu.Types
@@ -66,6 +74,13 @@ library
   default-language:    Haskell2010
   ghc-options:         -Wall
 
+  if flag(dev)
+      cpp-options:   -DDEVELOPMENT
+      ghc-options:   -O0
+  else
+      ghc-options:   -O
+
+
 
 test-suite test
     type:              exitcode-stdio-1.0
@@ -88,6 +103,9 @@ test-suite test
   default-language:    Haskell2010
 
 executable             qetag
+  if flag(library-only)
+      Buildable: False
+
   main-is:             qetag.hs
   hs-source-dirs:      tools
 
@@ -98,8 +116,17 @@ executable             qetag
   default-language:    Haskell2010
   ghc-options:         -Wall
 
+  if flag(dev)
+      cpp-options:   -DDEVELOPMENT
+      ghc-options:   -O0
+  else
+      ghc-options:   -O
+
 
 executable             qrsync
+  if flag(library-only)
+      Buildable: False
+
   main-is:             qrsync.hs
   hs-source-dirs:      tools
 
@@ -121,7 +148,16 @@ executable             qrsync
   default-language:    Haskell2010
   ghc-options:         -Wall
 
+  if flag(dev)
+      cpp-options:   -DDEVELOPMENT
+      ghc-options:   -O0
+  else
+      ghc-options:   -O
+
 executable             qmanage
+  if flag(library-only)
+      Buildable: False
+
   main-is:             qmanage.hs
   hs-source-dirs:      tools
 
@@ -140,3 +176,9 @@ executable             qmanage
 
   default-language:    Haskell2010
   ghc-options:         -Wall
+
+  if flag(dev)
+      cpp-options:   -DDEVELOPMENT
+      ghc-options:   -O0
+  else
+      ghc-options:   -O
