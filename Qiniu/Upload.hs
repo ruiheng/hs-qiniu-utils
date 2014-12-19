@@ -58,14 +58,14 @@ $(AT.deriveJSON
 uploadOneShot ::
     (MonadIO m, MonadThrow m, MonadLogger m, MonadReader UploadToken m) =>
     Maybe ResourceKey
-    -> Maybe FilePath   -- ^ optionally reveal the local file path
+    -> FilePath         -- ^ original file name
     -> LB.ByteString    -- ^ content of the file to uploaded
     -> m (WsResult UploadedFileInfo)
-uploadOneShot m_key m_fp bs = runExceptT $ do
+uploadOneShot m_key fp bs = runExceptT $ do
     upload_token <- ask
     let getr = liftIO $ try $ post "http://upload.qiniu.com/" $ catMaybes $
             [ Just $ partText "token" (fromString $ unUploadToken upload_token)
-            , Just $ partLBS "file" bs & partFileName .~ m_fp
+            , Just $ partLBS "file" bs & partFileName .~ (Just fp)
             , (partString "key" . unResourceKey ) <$> m_key
             ]
     rb <- ExceptT getr
