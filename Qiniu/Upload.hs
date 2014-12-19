@@ -55,13 +55,13 @@ $(AT.deriveJSON
     AT.defaultOptions{AT.fieldLabelModifier = map toLower . drop 3}
     ''UploadedFileInfo)
 
-uploadOneShort ::
+uploadOneShot ::
     (MonadIO m, MonadThrow m, MonadLogger m, MonadReader UploadToken m) =>
     Maybe ResourceKey
     -> Maybe FilePath   -- ^ optionally reveal the local file path
     -> LB.ByteString    -- ^ content of the file to uploaded
     -> m (WsResult UploadedFileInfo)
-uploadOneShort m_key m_fp bs = runExceptT $ do
+uploadOneShot m_key m_fp bs = runExceptT $ do
     upload_token <- ask
     let getr = liftIO $ try $ post "http://upload.qiniu.com/" $ catMaybes $
             [ Just $ partText "token" (fromString $ unUploadToken upload_token)
