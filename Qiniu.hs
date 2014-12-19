@@ -5,6 +5,7 @@ module Qiniu
     , module Qiniu.ByteString
     , module Qiniu.Upload
     , module Qiniu.Manage
+    , module Qiniu.Utils
     ) where
 
 import Qiniu.Types
@@ -13,3 +14,4 @@ import Qiniu.Security
 import Qiniu.ByteString
 import Qiniu.Upload
 import Qiniu.Manage
+import Qiniu.Utils
