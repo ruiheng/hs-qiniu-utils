@@ -169,7 +169,7 @@ executable             qmanage
                      , mtl
                      , monad-logger
                      , fast-logger
-                     , parsec3
+                     , parsec
                      , http-client
                      , exceptions
                      , conduit
