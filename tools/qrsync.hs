@@ -206,7 +206,7 @@ uploadOneFileByBlock block_size chunk_size fp = do
                                 (offset `div` block_size) cpr
                                 cpr_map
             let rui = cprMapToRecoverUploadInfo
-                        block_size chunk_size save_key new_cpr_map
+                        block_size chunk_size rkey new_cpr_map
             when cr_mode $ do
                 liftIO $ B.writeFile state_file $ Y.encode rui
             let done_len = doneBytesLength $ map snd $ Map.toList new_cpr_map
