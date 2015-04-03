@@ -27,6 +27,10 @@ Flag dev
     Description:   Turn on development settings, like disable optimization.
     Default:       True
 
+Flag prof
+    Description:   Turn on profiling settings
+    Default:       False
+
 library
   exposed-modules:     Qiniu.ByteString
                        Qiniu.Types
@@ -80,7 +84,8 @@ library
   else
       ghc-options:   -O
 
-
+  if flag(prof)
+      ghc-options:   -fprof-auto
 
 test-suite test
     type:              exitcode-stdio-1.0
