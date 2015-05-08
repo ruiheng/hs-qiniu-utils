@@ -187,21 +187,23 @@ uploadMkfile ::
     ) =>
     Int64                   -- ^ file size
     -> Maybe ResourceKey
+    -> Maybe ByteString     -- ^ optionally specify a mime type
     -> String               -- ^ last host
     -> [String]             -- ^ list of ctx
     -> m (WsResult UploadedFileInfo)
-uploadMkfile file_size m_key host ctx_list = runExceptT $ do
+uploadMkfile file_size m_key m_mime host ctx_list = runExceptT $ do
     upload_token <- ask
     let opts = defaults & header "Content-Type" .~ [ "application/octet-stream" ]
                         & header "Authorization" .~
                             [ fromString $ "UpToken " ++ unUploadToken upload_token ]
-        url = fixHost host ++ "/mkfile/" ++ show file_size ++
-                    (fromMaybe "" $ ("/key/" ++)
+        url = fixHost host ++ "/mkfile/" ++ show file_size
+                    ++ (fromMaybe "" $ ("/key/" ++)
                                     . C8.unpack
                                     . B64U.encode
                                     . UTF8.fromString
                                     . unResourceKey
                                     <$> m_key)
+                    ++ (fromMaybe "" $ flip fmap m_mime $ ("/mimeType" ++) . C8.unpack . B64U.encode)
 
     $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
     rb <- ExceptT $ liftIO $ try $ postWith opts url $
@@ -218,9 +220,10 @@ uploadByBlocks :: forall m.
     -> Int64            -- ^ block size
     -> Int64            -- ^ chunk size
     -> Maybe ResourceKey
+    -> Maybe ByteString     -- ^ optionally specify a mime type
     -> LB.ByteString    -- ^ content of the file to uploaded
     -> m (WsResultP UploadedFileInfo)
-uploadByBlocks on_err on_done block_size chunk_size m_key bs = runExceptT $ do
+uploadByBlocks on_err on_done block_size chunk_size m_key m_mime bs = runExceptT $ do
     let go cpr_list offset bs_to_upload = do
             let (bs1, bs2) = LB.splitAt block_size bs_to_upload
             cpr <- ExceptT $ uploadOneBlock
@@ -232,7 +235,7 @@ uploadByBlocks on_err on_done block_size chunk_size m_key bs = runExceptT $ do
 
     cprs <- go [] 0 bs
     ExceptT $ retryWsCall "uploadMkfile" on_err $
-                liftM packError $ uploadMkfile (LB.length bs) m_key
+                liftM packError $ uploadMkfile (LB.length bs) m_key m_mime
                                     (cprHost $ head cprs)
                                     (reverse $ map cprCtx cprs)
 
@@ -246,6 +249,7 @@ data RecoverUploadInfo = RecoverUploadInfo {
                         , ruiBlockSize          :: Int64
                         , ruiChunkSize          :: Int64
                         , ruiResourceKey        :: Maybe ResourceKey
+                        , ruiMimeType           :: Maybe ByteString
                         }
 
 instance FromJSON RecoverUploadInfo where
@@ -254,22 +258,25 @@ instance FromJSON RecoverUploadInfo where
                                 <*> (obj .: "block-size")
                                 <*> (obj .: "chunk-size")
                                 <*> (obj .:? "resource-key")
+                                <*> (fmap fromString <$> obj .:? "mime-type")
 
 instance ToJSON RecoverUploadInfo where
     toJSON x = object   [ "last-cpr-list"   .= ruiBlockLastCPR x
                         , "block-size"      .= ruiBlockSize x
                         , "chunk-size"      .= ruiChunkSize x
                         , "resource-key"    .= ruiResourceKey x
+                        , "mime-type"       .= fmap C8.unpack (ruiMimeType x)
                         ]
 
 cprMapToRecoverUploadInfo ::
     Int64
     -> Int64
     -> Maybe ResourceKey
+    -> Maybe ByteString     -- ^ optionally specify a mime type
     -> Map Int64 ChunkPutResult
     -> RecoverUploadInfo
-cprMapToRecoverUploadInfo block_size chunk_size m_key cpr_map =
-    RecoverUploadInfo cpr_list block_size chunk_size m_key
+cprMapToRecoverUploadInfo block_size chunk_size m_key m_mime cpr_map =
+    RecoverUploadInfo cpr_list block_size chunk_size m_key m_mime
     where
         cpr_list = if Map.null cpr_map
                     then []
@@ -302,6 +309,7 @@ uploadByBlocksContinue on_err on_done thread_num rui bs = runExceptT $ do
     let block_size  = ruiBlockSize rui
         chunk_size  = ruiChunkSize rui
         m_key       = ruiResourceKey rui
+        m_mime      = ruiMimeType rui
         expected_blk_num = fromIntegral $ (LB.length bs + block_size - 1) `div` block_size
         blk_cpr_list = take expected_blk_num $ ruiBlockLastCPR rui ++ repeat Nothing
 
@@ -314,7 +322,7 @@ uploadByBlocksContinue on_err on_done thread_num rui bs = runExceptT $ do
 
     cprs <- threadPoolRun thread_num actions >>= either throwM return
     ExceptT $ retryWsCall "uploadMkfile" on_err $
-                liftM packError $ uploadMkfile (LB.length bs) m_key
+                liftM packError $ uploadMkfile (LB.length bs) m_key m_mime
                                     (cprHost $ last cprs)
                                     (map cprCtx cprs)
 

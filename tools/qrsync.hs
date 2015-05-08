@@ -175,8 +175,8 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 
 uploadOneFileByBlock :: forall m.
     (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m) =>
-    Int64 -> Int64 -> FilePath -> ReaderT RsyncOptions m ()
-uploadOneFileByBlock block_size chunk_size fp = do
+    Int64 -> Int64 -> Maybe ByteString -> FilePath -> ReaderT RsyncOptions m ()
+uploadOneFileByBlock block_size chunk_size m_mime fp = do
     ro <- ask
     let skey    = roSecretKey ro
         akey    = roAccessKey ro
@@ -191,7 +191,7 @@ uploadOneFileByBlock block_size chunk_size fp = do
 
     bs <- liftIO $ LB.readFile fp
     let etag = hetagL bs
-        empty_rui = RecoverUploadInfo [] block_size chunk_size rkey
+        empty_rui = RecoverUploadInfo [] block_size chunk_size rkey m_mime
     (state_fp, m_rui) <- if cr_mode
                             then lookupStateFile etag
                             else return (".useless.yml", Nothing)
@@ -206,7 +206,7 @@ uploadOneFileByBlock block_size chunk_size fp = do
                                 (offset `div` block_size) cpr
                                 cpr_map
             let rui = cprMapToRecoverUploadInfo
-                        block_size chunk_size rkey new_cpr_map
+                        block_size chunk_size rkey m_mime new_cpr_map
             when cr_mode $ do
                 liftIO $ B.writeFile state_file $ Y.encode rui
             let done_len = doneBytesLength $ map snd $ Map.toList new_cpr_map
@@ -263,7 +263,7 @@ start fps = do
     ro <- ask
     case (roBlockSize ro, roChunkSize ro) of
         (Just block_size, Just chunk_size) ->
-                                mapM_ (uploadOneFileByBlock block_size chunk_size) fps
+                                mapM_ (uploadOneFileByBlock block_size chunk_size Nothing) fps
         _ -> mapM_ uploadOneFile fps
 
 start' :: RsyncOptions -> [FilePath] -> IO ()
