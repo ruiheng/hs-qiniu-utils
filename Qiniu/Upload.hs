@@ -14,7 +14,7 @@ import qualified Data.ByteString.Char8      as C8
 import Control.Applicative                  ((<$>), (<*>))
 import Data.Maybe                           (catMaybes, fromMaybe)
 import Data.String                          (fromString)
--- import Data.ByteString                      (ByteString)
+import Data.ByteString                      (ByteString)
 import qualified Data.ByteString.UTF8       as UTF8
 import Data.List                            (intersperse, isPrefixOf)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
@@ -58,14 +58,17 @@ $(AT.deriveJSON
 uploadOneShot ::
     (MonadIO m, MonadThrow m, MonadLogger m, MonadReader UploadToken m) =>
     Maybe ResourceKey
+    -> Maybe ByteString -- ^ optionally specify a mime type
     -> FilePath         -- ^ original file name
     -> LB.ByteString    -- ^ content of the file to uploaded
     -> m (WsResult UploadedFileInfo)
-uploadOneShot m_key fp bs = runExceptT $ do
+uploadOneShot m_key m_mime fp bs = runExceptT $ do
     upload_token <- ask
     let getr = liftIO $ try $ post "http://upload.qiniu.com/" $ catMaybes $
             [ Just $ partText "token" (fromString $ unUploadToken upload_token)
-            , Just $ partLBS "file" bs & partFileName .~ (Just fp)
+            , Just $ partLBS "file" bs
+                    & partFileName .~ (Just fp)
+                    & maybe id (\mime -> partContentType .~ Just mime) m_mime
             , (partString "key" . unResourceKey ) <$> m_key
             ]
     rb <- ExceptT getr

@@ -144,7 +144,7 @@ uploadOneFile fp = do
     let upload_token = uploadToken skey akey pp
     let rkey = Nothing
     ws_result <- (liftIO $ LB.readFile fp)
-                    >>= flip runReaderT upload_token . (uploadOneShot rkey fp)
+                    >>= flip runReaderT upload_token . (uploadOneShot rkey Nothing fp)
     liftIO $ do
         case ws_result of
             Left http_err -> do
