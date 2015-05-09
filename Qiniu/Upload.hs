@@ -61,8 +61,13 @@ uploadOneShot ::
     -> FilePath         -- ^ original file name
     -> LB.ByteString    -- ^ content of the file to uploaded
     -> m (WsResult UploadedFileInfo)
-uploadOneShot m_key fp bs = runExceptT $ do
+uploadOneShot m_key fp' bs = runExceptT $ do
     upload_token <- ask
+
+    -- 七牛要求一定要提供一个文件名，如果没名会出错
+    -- XXX: 但分片上传时没看到哪里需要这个文件名参数
+    let fp = if null fp' then "<unnamed>" else fp
+
     let getr = liftIO $ try $ post "http://upload.qiniu.com/" $ catMaybes $
             [ Just $ partText "token" (fromString $ unUploadToken upload_token)
             , Just $ partLBS "file" bs & partFileName .~ (Just fp)
