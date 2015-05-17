@@ -32,6 +32,7 @@ import Network.HTTP.Client                  (withManager, Manager
                                             , defaultManagerSettings
                                             )
 import Data.Conduit                         (($$))
+import Data.Text                            (Text)
 import qualified Data.Conduit.List          as CL
 
 import Qiniu.Types
@@ -68,6 +69,7 @@ data Command = Stat Entry
             | Move Entry Entry
             | ChangeMime Entry ByteString
             | List Bucket String
+            | Fetch Text Entry
             deriving (Show)
 
 parseCommand :: CharParser (Maybe Command)
@@ -84,6 +86,7 @@ parseCommand = do
             "move"  -> Just . uncurry Move <$> p_two_entries <* (TP.spaces >> TP.eof)
             "chgm"  -> Just <$> p_chgm <* (TP.spaces >> TP.eof)
             "list"  -> Just <$> p_list <* (TP.spaces >> TP.eof)
+            "fetch" -> fmap Just $ Fetch <$> fmap fromString p_maybe_quoted_s <*> p_entry
             _       -> fail $ "unknown command: " ++ show cmd
     where
         p_bucket = do
@@ -195,6 +198,8 @@ processCmd secret_key access_key (List bucket prefix) = do
     where
         f s = liftIO $ do
                 print s
+processCmd secret_key access_key (Fetch url entry) = do
+    (fetch secret_key access_key url entry) >>= printResult (const $ return ())
 
 
 interactive ::

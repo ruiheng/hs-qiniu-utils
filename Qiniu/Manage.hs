@@ -7,6 +7,7 @@ import Prelude
 import qualified Data.Aeson.TH              as AT
 import qualified Data.ByteString.Base64.URL as B64U
 
+import Data.Text.Encoding                   (encodeUtf8)
 import Data.Int                             (Int64)
 import Data.ByteString                      (ByteString)
 import Data.Default                         (def)
@@ -26,6 +27,8 @@ import Data.Maybe                           (fromMaybe)
 import Qiniu.Utils                          ( lowerFirst
                                             , ServerTimeStamp(..), UrlSafeEncoded(..)
                                             )
+import Data.Text                            (Text)
+
 import Qiniu.Types
 import Qiniu.Security
 import Qiniu.WS.Types
@@ -203,3 +206,21 @@ listSource secret_key access_key bucket limit delimiter prefix = do
             if null new_marker
                 then return ()
                 else go new_marker
+
+
+fetch :: (MonadIO m, MonadReader Manager m, MonadCatch m) =>
+    SecretKey
+    -> AccessKey
+    -> Text         -- ^ from url
+    -> Entry        -- ^ to
+    -> m (WsResult ())
+fetch secret_key access_key url_from entry_to = runExceptT $ do
+    mgmt <- ask
+    req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
+    asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+    where
+        url_path    = "/fetch/" <> B64U.encode (encodeUtf8 url_from)
+                                <> "/to/" <> encodedEntryUri entry_to
+        req         = manageApiReqPost [] url_path
+
+
