@@ -6,6 +6,7 @@ module Qiniu
     , module Qiniu.Upload
     , module Qiniu.Manage
     , module Qiniu.URL
+    , module Qiniu.Error
     , module Qiniu.Utils
     ) where
 
@@ -16,4 +17,5 @@ import Qiniu.ByteString
 import Qiniu.Upload
 import Qiniu.Manage
 import Qiniu.URL
+import Qiniu.Error
 import Qiniu.Utils
