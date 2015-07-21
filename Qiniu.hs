@@ -7,6 +7,7 @@ module Qiniu
     , module Qiniu.Manage
     , module Qiniu.URL
     , module Qiniu.Error
+    , module Qiniu.Config
     , module Qiniu.Utils
     ) where
 
@@ -18,4 +19,5 @@ import Qiniu.Upload
 import Qiniu.Manage
 import Qiniu.URL
 import Qiniu.Error
+import Qiniu.Config
 import Qiniu.Utils

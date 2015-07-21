@@ -40,6 +40,7 @@ library
                        Qiniu.Manage
                        Qiniu.URL
                        Qiniu.Error
+                       Qiniu.Config
                        Qiniu
   other-modules:       Qiniu.HttpClient
                        Qiniu.Utils
