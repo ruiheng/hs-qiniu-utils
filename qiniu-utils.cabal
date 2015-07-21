@@ -38,6 +38,7 @@ library
                        Qiniu.WS.Types
                        Qiniu.Upload
                        Qiniu.Manage
+                       Qiniu.URL
                        Qiniu
   other-modules:       Qiniu.HttpClient
                        Qiniu.Utils
