@@ -221,6 +221,6 @@ fetch secret_key access_key url_from entry_to = runExceptT $ do
     where
         url_path    = "/fetch/" <> B64U.encode (encodeUtf8 url_from)
                                 <> "/to/" <> encodedEntryUri entry_to
-        req         = manageApiReqPost [] url_path
+        req         = (manageApiReqPost [] url_path) { host = "iovip.qbox.me" }
 
 
