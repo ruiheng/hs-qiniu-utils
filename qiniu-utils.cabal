@@ -46,7 +46,7 @@ library
                        Qiniu.Utils
 
   -- other-extensions:    
-  build-depends:       base >=4.7 && <4.8
+  build-depends:       base >=4.7 && <4.9
                      , containers
                      , bytestring
                      , base64-bytestring
@@ -117,7 +117,7 @@ executable             qetag
   main-is:             qetag.hs
   hs-source-dirs:      tools
 
-  build-depends:       base >=4.7 && <4.8
+  build-depends:       base >=4.7 && <4.9
                      , bytestring
                      , qiniu-utils
 
@@ -138,7 +138,7 @@ executable             qrsync
   main-is:             qrsync.hs
   hs-source-dirs:      tools
 
-  build-depends:       base >=4.7 && <4.8
+  build-depends:       base >=4.7 && <4.9
                      , bytestring
                      , qiniu-utils
                      , optparse-applicative >= 0.10
@@ -169,7 +169,7 @@ executable             qmanage
   main-is:             qmanage.hs
   hs-source-dirs:      tools
 
-  build-depends:       base >=4.7 && <4.8
+  build-depends:       base >=4.7 && <4.9
                      , bytestring
                      , qiniu-utils
                      , optparse-applicative >= 0.10
