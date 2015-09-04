@@ -64,3 +64,18 @@ instance FromJSON QiniuDualConfig where
 
             nullToMaybe Nothing = Nothing
             nullToMaybe (Just x) = if null x then Nothing else Just x
+
+
+pubOfQiniuDualConfig :: QiniuDualConfig -> QiniuConfig
+pubOfQiniuDualConfig qc = QiniuConfig
+                            (qcDualSecretKey qc)
+                            (qcDualAccessKey qc)
+                            (qcDualPublicBucket qc)
+                            (qcDualPublicDomain qc)
+
+priOfQiniuDualConfig :: QiniuDualConfig -> QiniuConfig
+priOfQiniuDualConfig qc = QiniuConfig
+                            (qcDualSecretKey qc)
+                            (qcDualAccessKey qc)
+                            (qcDualPrivateBucket qc)
+                            (qcDualPrivateDomain qc)
