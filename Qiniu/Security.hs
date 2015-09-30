@@ -16,7 +16,7 @@ import qualified Blaze.ByteString.Builder.Char.Utf8 as BBU8
 import Data.Time.Clock.POSIX                (utcTimeToPOSIXSeconds)
 import Data.Time                            (UTCTime)
 import Data.Int                             (Int64)
-import Data.Monoid                          (mconcat, (<>))
+import Data.Monoid
 import Network.HTTP.Client                  ( Request )
 import Network.HTTP.Types                   (Header, hAuthorization)
 import qualified Network.HTTP.Client        as HC

@@ -10,7 +10,7 @@ import Data.Aeson                           (Value, withObject, (.:)
                                             , FromJSON, parseJSON)
 import qualified Data.Aeson                 as A
 import Control.Monad.Catch                  (MonadThrow, throwM, catch, MonadCatch)
-import Control.Applicative                  ((<$>), (<*>), (<|>))
+import Control.Applicative
 import Control.Monad                        (liftM)
 import Control.Monad.Trans.Class            (MonadTrans, lift)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))

@@ -11,7 +11,6 @@ import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Aeson.TH              as AT
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Char8      as C8
-import Control.Applicative                  ((<$>), (<*>))
 import Data.Maybe                           (catMaybes, fromMaybe)
 import Data.String                          (fromString)
 import Data.ByteString                      (ByteString)

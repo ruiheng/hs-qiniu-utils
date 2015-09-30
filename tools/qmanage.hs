@@ -12,11 +12,8 @@ import System.IO.Error                      (isEOFError)
 
 import Data.String                          (fromString)
 import Data.ByteString                      (ByteString)
-import Control.Monad.Logger                 (MonadLogger, runLoggingT, Loc
-                                            , LogLevel(..), defaultLogStr
-                                            , LogSource, logInfo)
-import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
-                                            , LoggerSet, LogStr)
+import Control.Monad.Logger
+import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet, LoggerSet)
 import Control.Monad.IO.Class               (MonadIO, liftIO)
 import Control.Monad.Trans.Class            (lift)
 import Control.Monad.Catch                  (MonadCatch, try)
@@ -28,7 +25,7 @@ import qualified Text.Parsec.Token          as TPT
 import Text.Parsec.Language                 (haskellDef)
 import Data.Char                            (isSpace, isAlphaNum)
 import Control.Monad                        (void)
-import Network.HTTP.Client                  (withManager, Manager
+import Network.HTTP.Client                  (newManager, Manager
                                             , defaultManagerSettings
                                             )
 import Data.Conduit                         (($$))
@@ -246,12 +243,12 @@ start m_cmds = do
 
 start' :: ManageOptions -> Maybe [Command] -> IO ()
 start' mo cmds = do
-    withManager defaultManagerSettings $ \mgmt -> do
-        logger_set <- newStderrLoggerSet 0
-        flip runReaderT mgmt $ do
-            runLoggingT
-                (runReaderT (start cmds) mo)
-                (appLogger logger_set (moVerbose mo))
+    mgmt <- newManager defaultManagerSettings
+    logger_set <- newStderrLoggerSet 0
+    flip runReaderT mgmt $ do
+        runLoggingT
+            (runReaderT (start cmds) mo)
+            (appLogger logger_set (moVerbose mo))
 
 
 main :: IO ()

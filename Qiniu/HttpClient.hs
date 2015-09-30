@@ -4,7 +4,7 @@ import Prelude
 import qualified Blaze.ByteString.Builder   as BB
 import qualified Data.ByteString            as B
 
-import Data.Monoid                          (mempty, (<>))
+import Data.Monoid
 import Data.IORef                           (newIORef, writeIORef, readIORef)
 import Network.HTTP.Client                  ( Request, RequestBody(..) , GivesPopper
                                             , requestHeaders
