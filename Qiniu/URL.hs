@@ -7,6 +7,7 @@ import Data.Time
 
 import Qiniu.Types
 import Qiniu.Security
+import Qiniu.Config
 
 
 resourceDownloadUrl :: IsString s =>
@@ -33,6 +34,42 @@ resourceDownloadUrl' m_domain bucket rkey m_qs = fromString $
             Just qs@('?':_) -> qs
             Just qs         -> '?' : qs
         ]
+
+
+resourceDownloadUrlByConfig :: IsString s =>
+    QiniuConfig
+    -> ResourceKey
+    -> s
+resourceDownloadUrlByConfig qc rkey =
+    resourceDownloadUrl m_domain bucket rkey
+    where
+        m_domain = qiniuConfigDomain qc
+        bucket   = qiniuConfigBucket qc
+
+resourceDownloadUrlByConfig' :: IsString s =>
+    QiniuConfig
+    -> ResourceKey
+    -> Maybe String     -- ^ optional query string
+    -> s
+resourceDownloadUrlByConfig' qc rkey m_qs =
+    resourceDownloadUrl' m_domain bucket rkey m_qs
+    where
+        m_domain = qiniuConfigDomain qc
+        bucket   = qiniuConfigBucket qc
+
+resourceDownloadUrlByPubConfig :: IsString s =>
+    QiniuDualConfig
+    -> ResourceKey
+    -> s
+resourceDownloadUrlByPubConfig dual =
+    resourceDownloadUrlByConfig (pubOfQiniuDualConfig dual)
+
+resourceDownloadUrlByPubConfig' :: IsString s =>
+    QiniuDualConfig
+    -> ResourceKey
+    -> Maybe String     -- ^ optional query string
+    -> s
+resourceDownloadUrlByPubConfig' dual = resourceDownloadUrlByConfig' (pubOfQiniuDualConfig dual)
 
 
 authedResourceDownloadUrl :: IsString s =>
