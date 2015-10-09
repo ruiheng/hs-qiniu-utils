@@ -1,10 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Qiniu.Types where
 
 import Prelude
 import qualified Data.ByteString.Base64.URL as B64U
+import qualified Data.Aeson.TH              as AT
 
+import Data.Char                            (toLower)
 import Data.Time                            (UTCTime)
 import Data.Time.Clock.POSIX                (utcTimeToPOSIXSeconds)
 import Data.Aeson                           (FromJSON, ToJSON, toJSON, object, (.=))
@@ -78,6 +81,18 @@ newtype AccessKey = AccessKey { unAccessKey :: ByteString }
 
 newtype AccessToken = AccessToken { unAccessToken :: ByteString }
                     deriving (Eq, Ord, Show)
+
+
+-- | 上传文件及抓取第三方资源都返回这样的值
+data UploadedFileInfo = UploadedFileInfo {
+                            ufiHash     :: String
+                            , ufiKey    :: ResourceKey
+                        }
+                        deriving (Eq, Show)
+
+$(AT.deriveJSON
+    AT.defaultOptions{AT.fieldLabelModifier = map toLower . drop 3}
+    ''UploadedFileInfo)
 
 
 logSource :: IsString a => a

@@ -44,15 +44,6 @@ import Qiniu.Security
 import Qiniu.Types
 import Qiniu.WS.Types
 
-data UploadedFileInfo = UploadedFileInfo {
-                            ufiHash     :: String
-                            , ufiKey    :: ResourceKey
-                        }
-                        deriving (Eq, Show)
-
-$(AT.deriveJSON
-    AT.defaultOptions{AT.fieldLabelModifier = map toLower . drop 3}
-    ''UploadedFileInfo)
 
 uploadOneShot ::
     (MonadIO m, MonadThrow m, MonadLogger m, MonadReader UploadToken m) =>
