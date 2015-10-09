@@ -212,15 +212,15 @@ fetch :: (MonadIO m, MonadReader Manager m, MonadCatch m) =>
     SecretKey
     -> AccessKey
     -> Text         -- ^ from url
-    -> Entry        -- ^ to
+    -> Scope        -- ^ to
     -> m (WsResult UploadedFileInfo)
-fetch secret_key access_key url_from entry_to = runExceptT $ do
+fetch secret_key access_key url_from scope_to = runExceptT $ do
     mgmt <- ask
     req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
     asWsResponseNormal' =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
     where
         url_path    = "/fetch/" <> B64U.encode (encodeUtf8 url_from)
-                                <> "/to/" <> encodedEntryUri entry_to
+                                <> "/to/" <> encodedScopeUri scope_to
         req         = (manageApiReqPost [] url_path) { host = "iovip.qbox.me" }
 
 

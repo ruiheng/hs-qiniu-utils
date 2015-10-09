@@ -66,7 +66,7 @@ data Command = Stat Entry
             | Move Entry Entry
             | ChangeMime Entry ByteString
             | List Bucket String
-            | Fetch Text Entry
+            | Fetch Text Scope
             deriving (Show)
 
 parseCommand :: CharParser (Maybe Command)
@@ -83,7 +83,7 @@ parseCommand = do
             "move"  -> Just . uncurry Move <$> p_two_entries <* (TP.spaces >> TP.eof)
             "chgm"  -> Just <$> p_chgm <* (TP.spaces >> TP.eof)
             "list"  -> Just <$> p_list <* (TP.spaces >> TP.eof)
-            "fetch" -> fmap Just $ Fetch <$> fmap fromString p_maybe_quoted_s <*> p_entry
+            "fetch" -> fmap Just $ Fetch <$> fmap fromString p_maybe_quoted_s <*> p_scope
             _       -> fail $ "unknown command: " ++ show cmd
     where
         p_bucket = do
@@ -97,6 +97,13 @@ parseCommand = do
             _ <- TP.char ':'
             rkey <- p_rkey
             return $ (bucket, rkey)
+
+        p_scope = do
+            bucket <- p_bucket
+            m_key <- TP.optionMaybe $ do
+                        _ <- TP.char ':'
+                        p_rkey
+            return $ Scope bucket m_key
 
         p_two_entries = do
             e1 <- p_entry
@@ -195,8 +202,8 @@ processCmd secret_key access_key (List bucket prefix) = do
     where
         f s = liftIO $ do
                 print s
-processCmd secret_key access_key (Fetch url entry) = do
-    (fetch secret_key access_key url entry) >>= printResult (const $ return ())
+processCmd secret_key access_key (Fetch url scope) = do
+    (fetch secret_key access_key url scope) >>= printResult (const $ return ())
 
 
 interactive ::
