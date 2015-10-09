@@ -31,6 +31,13 @@ newtype ResourceKey = ResourceKey { unResourceKey :: String }
 data Scope = Scope Bucket (Maybe ResourceKey)
                 deriving (Eq, Ord)
 
+encodedScopeUri :: Scope -> ByteString
+encodedScopeUri (Scope bucket m_key) =
+    B64U.encode $ fromString $ unBucket bucket ++
+                    case m_key of
+                        Just key -> ":" ++ unResourceKey key
+                        Nothing -> ""
+
 instance Show Scope where
     show (Scope bucket m_key) =
         case m_key of
@@ -46,7 +53,6 @@ type Entry = (Bucket, ResourceKey)
 encodedEntryUri :: Entry -> ByteString
 encodedEntryUri (bucket, key) =
     B64U.encode $ fromString $ unBucket bucket ++ ":" ++ unResourceKey key
-
 
 
 data PutPolicy = PutPolicy {
