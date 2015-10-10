@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE CPP #-}
 module Qiniu.Upload where
 
 import Prelude
@@ -11,6 +12,9 @@ import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Aeson.TH              as AT
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Char8      as C8
+#if !MIN_VERSION_base(4, 8, 0)
+import Control.Applicative                  ((<$>), (<*>))
+#endif
 import Data.Maybe                           (catMaybes, fromMaybe)
 import Data.String                          (fromString)
 import Data.ByteString                      (ByteString)
