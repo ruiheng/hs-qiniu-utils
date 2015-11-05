@@ -15,16 +15,21 @@ import Control.Monad                        (liftM)
 import Control.Monad.Trans.Class            (MonadTrans, lift)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Network.HTTP.Client                  (HttpException(..))
+import Network.HTTP.Types                   (statusCode)
+import Data.Maybe                           (fromMaybe)
 import Data.Typeable                        (Typeable)
 import Control.Exception                    (Exception)
 
-import Network.Wreq
+import Network.Wreq hiding (statusCode)
 import Control.Lens
 
 type WsRespBodyNormal = Map String Value
 
 data WsError = WsError {
-                    wsHttpCode :: Int
+                    __wsHttpCode :: Int
+                    -- ^ CAUTION: 见下面的注释：
+                    -- 实测看，七牛可能尽量在 http status 中返回错误代码
+                    -- 而不是 json 结构里
                     , wsErrMsg :: String
                 }
                 deriving (Eq, Show, Typeable)
@@ -100,6 +105,26 @@ type WsResult a = Either HttpException (Either WsError a)
 
 -- | 这个类型方便统一处理两种错误
 type WsResultP a = Either (Either HttpException WsError) a
+
+
+-- | 文档把所有错误代码叫 http 状态码
+-- 但有些接口文档描述的返回 json 格式中又有一个 code 字段，也叫 http code
+-- 不是非常确定实际上每个接口的错误代码到底是从 http 协议里的 status 返回，
+-- 还是从 json 结构里返回。
+-- 比如上传文件：实测发现，如果文件已存在，则出 614 错，是从 http 头里返回的
+-- 但文档应该从 json 结构里返回
+-- 我们代码尽量兼容这两种可能
+-- 这个函数的责任就是从两个地方提取提取错误代码
+wsErrorCode :: Either HttpException WsError
+            -> Maybe Int
+wsErrorCode (Left (StatusCodeException status _ _)) = Just $ statusCode status
+wsErrorCode (Right e)                               = Just $ __wsHttpCode e
+wsErrorCode _                                       = Nothing
+
+testWsErrorCode :: (Int -> Bool)
+                -> Either HttpException WsError
+                -> Bool
+testWsErrorCode f e = fromMaybe False $ wsErrorCode e >>= return . f
 
 packError :: WsResult a -> WsResultP a
 packError (Left x)          = Left $ Left x
