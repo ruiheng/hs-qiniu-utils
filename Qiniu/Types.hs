@@ -6,6 +6,7 @@ module Qiniu.Types where
 import Prelude
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.Aeson.TH              as AT
+import qualified Data.Text.Encoding         as TE
 
 import Data.Char                            (toLower)
 import Data.Time                            (UTCTime)
@@ -52,7 +53,7 @@ type Entry = (Bucket, ResourceKey)
 
 encodedEntryUri :: Entry -> ByteString
 encodedEntryUri (bucket, key) =
-    B64U.encode $ fromString $ unBucket bucket ++ ":" ++ unResourceKey key
+    B64U.encode $ TE.encodeUtf8 $ fromString $ unBucket bucket ++ ":" ++ unResourceKey key
 
 
 data PutPolicy = PutPolicy {
