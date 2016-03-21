@@ -2,7 +2,6 @@
 module Qiniu.Config where
 
 import Prelude
-import Control.Applicative
 import Control.Monad
 import Data.Aeson
 import Data.String

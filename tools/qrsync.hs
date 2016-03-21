@@ -12,6 +12,7 @@ import qualified Data.Map                   as Map
 import qualified Data.Yaml                  as Y
 import qualified Data.ByteString.Char8      as C8
 import qualified Control.Monad.Trans.State  as S
+import qualified Network.Wreq.Session       as WS
 import Data.ByteString                      (ByteString)
 import Data.String                          (fromString)
 import Data.List                            (nub)
@@ -132,8 +133,8 @@ parseFileNames :: Parser [FilePath]
 parseFileNames = fmap nub $ some $ argument str $ metavar "FILES..."
 
 uploadOneFile :: (MonadIO m, MonadThrow m, MonadLogger m) =>
-    FilePath -> ReaderT RsyncOptions m ()
-uploadOneFile fp = do
+    WS.Session ->FilePath -> ReaderT RsyncOptions m ()
+uploadOneFile sess fp = do
     ro <- ask
     let skey    = roSecretKey ro
         akey    = roAccessKey ro
@@ -144,7 +145,7 @@ uploadOneFile fp = do
     let upload_token = uploadToken skey akey pp
     let rkey = Nothing
     ws_result <- (liftIO $ LB.readFile fp)
-                    >>= flip runReaderT upload_token . (uploadOneShot rkey Nothing fp)
+                    >>= flip runReaderT (sess, upload_token) . (uploadOneShot rkey Nothing fp)
     liftIO $ do
         case ws_result of
             Left http_err -> do
@@ -175,8 +176,8 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 
 uploadOneFileByBlock :: forall m.
     (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m) =>
-    Int64 -> Int64 -> Maybe ByteString -> FilePath -> ReaderT RsyncOptions m ()
-uploadOneFileByBlock block_size chunk_size m_mime fp = do
+    WS.Session -> Int64 -> Int64 -> Maybe ByteString -> FilePath -> ReaderT RsyncOptions m ()
+uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
     ro <- ask
     let skey    = roSecretKey ro
         akey    = roAccessKey ro
@@ -233,7 +234,7 @@ uploadOneFileByBlock block_size chunk_size m_mime fp = do
                                                             thread_num
                                                             last_rui
                                                             bs)
-                                                        upload_token
+                                                        (sess, upload_token)
 
                             writeChan done_ch Nothing >> wait watcher >> return ()
                             return ws_result
@@ -258,19 +259,20 @@ uploadOneFileByBlock block_size chunk_size m_mime fp = do
                     exitFailure
 
 start :: (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m) =>
-    [FilePath] -> ReaderT RsyncOptions m ()
-start fps = do
+    WS.Session ->[FilePath] -> ReaderT RsyncOptions m ()
+start sess fps = do
     ro <- ask
     case (roBlockSize ro, roChunkSize ro) of
         (Just block_size, Just chunk_size) ->
-                                mapM_ (uploadOneFileByBlock block_size chunk_size Nothing) fps
-        _ -> mapM_ uploadOneFile fps
+            mapM_ (uploadOneFileByBlock sess block_size chunk_size Nothing) fps
+
+        _ -> mapM_ (uploadOneFile sess) fps
 
 start' :: RsyncOptions -> [FilePath] -> IO ()
-start' ro fps = do
+start' ro fps = WS.withAPISession $ \sess -> do
     logger_set <- newStderrLoggerSet 0
     runLoggingT
-        (runReaderT (start fps) ro)
+        (runReaderT (start sess fps) ro)
         (appLogger logger_set (roVerbose ro))
 
 main :: IO ()

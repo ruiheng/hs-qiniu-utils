@@ -42,6 +42,7 @@ import Data.Aeson                           (FromJSON, ToJSON, parseJSON, toJSON
                                             , object, withObject, (.:), (.:?), (.=))
 
 import Network.Wreq
+import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
 
 import Qiniu.Security
@@ -49,21 +50,22 @@ import Qiniu.Types
 import Qiniu.WS.Types
 
 
-uploadOneShot ::
-    (MonadIO m, MonadThrow m, MonadLogger m, MonadReader UploadToken m) =>
-    Maybe ResourceKey
-    -> Maybe ByteString -- ^ optionally specify a mime type
-    -> FilePath         -- ^ original file name
-    -> LB.ByteString    -- ^ content of the file to uploaded
-    -> m (WsResult UploadedFileInfo)
+type QiniuUploadMonad m = (MonadIO m, MonadThrow m, MonadLogger m, MonadReader (WS.Session, UploadToken) m)
+
+uploadOneShot :: (QiniuUploadMonad m)
+              => Maybe ResourceKey
+              -> Maybe ByteString -- ^ optionally specify a mime type
+              -> FilePath         -- ^ original file name
+              -> LB.ByteString    -- ^ content of the file to uploaded
+              -> m (WsResult UploadedFileInfo)
 uploadOneShot m_key m_mime fp' bs = runExceptT $ do
-    upload_token <- ask
+    (sess, upload_token) <- ask
 
     -- 七牛要求一定要提供一个文件名，如果没名会出错
     -- XXX: 但分片上传时没看到哪里需要这个文件名参数
     let fp = if null fp' then "<unnamed>" else fp
 
-    let getr = liftIO $ try $ post "http://upload.qiniu.com/" $ catMaybes $
+    let getr = liftIO $ try $ WS.post sess "http://upload.qiniu.com/" $ catMaybes $
             [ Just $ partText "token" (fromString $ unUploadToken upload_token)
             , Just $ partLBS "file" bs
                     & partFileName .~ (Just fp)
@@ -108,34 +110,31 @@ type UploadOpDoneReporter m = Int64 -> ChunkPutResult -> m ()
 type UploadOpDoneReporter' m = ChunkPutResult -> m ()
 
 
-uploadMkblk :: (MonadIO m, MonadThrow m, MonadLogger m, MonadReader UploadToken m) =>
-    Int64               -- ^ block size
-    -> LB.ByteString    -- ^ content of the file to uploaded
-                        -- the first chunk in this block
-    -> m (WsResult ChunkPutResult)
+uploadMkblk :: (QiniuUploadMonad m)
+            => Int64               -- ^ block size
+            -> LB.ByteString    -- ^ content of the file to uploaded
+                                -- the first chunk in this block
+            -> m (WsResult ChunkPutResult)
 uploadMkblk block_size bs = runExceptT $ do
-    upload_token <- ask
+    (sess, upload_token) <- ask
     let opts = defaults & header "Content-Type" .~ [ "application/octet-stream" ]
                         & header "Authorization" .~
                             [ fromString $ "UpToken " ++ unUploadToken upload_token ]
         host = "http://upload.qiniu.com/"
         url  = host ++ "mkblk/" ++ show block_size
     $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
-    rb <- ExceptT $ liftIO $ try $ postWith opts url bs
+    rb <- ExceptT $ liftIO $ try $ WS.postWith opts sess url bs
     runExceptT $ do
         r <- ExceptT $ asWsResponseNormal rb
         respJsonGetChunkPutResult r
 
 
-uploadBput ::
-    ( MonadIO m, MonadThrow m, MonadLogger m
-    , MonadReader UploadToken m
-    ) =>
-    ChunkPutResult       -- ^ previous chunk put result
-    -> LB.ByteString
-    -> m (WsResult ChunkPutResult)
+uploadBput :: (QiniuUploadMonad m)
+           => ChunkPutResult       -- ^ previous chunk put result
+           -> LB.ByteString
+           -> m (WsResult ChunkPutResult)
 uploadBput cpr bs = runExceptT $ do
-    upload_token <- ask
+    (sess, upload_token) <- ask
     let opts = defaults & header "Content-Type" .~ [ "application/octet-stream" ]
                         & header "Authorization" .~
                             [ fromString $ "UpToken " ++ unUploadToken upload_token ]
@@ -145,19 +144,16 @@ uploadBput cpr bs = runExceptT $ do
         url = host ++ "/bput/" ++ ctx ++ "/" ++ show offset
 
     $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
-    (asWsResponseNormal' =<<) $ ExceptT $ liftIO $ try $ postWith opts url bs
+    (asWsResponseNormal' =<<) $ ExceptT $ liftIO $ try $ WS.postWith opts sess url bs
 
 
 -- | Upload a whole block: repeatly call uploadBput
-uploadOneBlock ::
-    ( MonadIO m, MonadThrow m, MonadLogger m
-    , MonadReader UploadToken m
-    ) =>
-    OnWsCallError m
-    -> UploadOpDoneReporter' m
-    -> Int64                -- ^ chunk size
-    -> LB.ByteString
-    -> m (WsResultP ChunkPutResult)
+uploadOneBlock :: (QiniuUploadMonad m)
+               => OnWsCallError m
+               -> UploadOpDoneReporter' m
+               -> Int64                -- ^ chunk size
+               -> LB.ByteString
+               -> m (WsResultP ChunkPutResult)
 uploadOneBlock on_err on_done chunk_size bs = runExceptT $ do
     let block_size = LB.length bs
     let (fst_bs, other_bs) = LB.splitAt chunk_size bs
@@ -180,18 +176,15 @@ uploadOneBlock on_err on_done chunk_size bs = runExceptT $ do
             go cpr0 other_bs
 
 
-uploadMkfile ::
-    ( MonadIO m, MonadThrow m, MonadLogger m
-    , MonadReader UploadToken m
-    ) =>
-    Int64                   -- ^ file size
-    -> Maybe ResourceKey
-    -> Maybe ByteString     -- ^ optionally specify a mime type
-    -> String               -- ^ last host
-    -> [String]             -- ^ list of ctx
-    -> m (WsResult UploadedFileInfo)
+uploadMkfile :: (QiniuUploadMonad m)
+             => Int64                   -- ^ file size
+             -> Maybe ResourceKey
+             -> Maybe ByteString     -- ^ optionally specify a mime type
+             -> String               -- ^ last host
+             -> [String]             -- ^ list of ctx
+             -> m (WsResult UploadedFileInfo)
 uploadMkfile file_size m_key m_mime host ctx_list = runExceptT $ do
-    upload_token <- ask
+    (sess, upload_token) <- ask
     let opts = defaults & header "Content-Type" .~ [ "application/octet-stream" ]
                         & header "Authorization" .~
                             [ fromString $ "UpToken " ++ unUploadToken upload_token ]
@@ -205,23 +198,20 @@ uploadMkfile file_size m_key m_mime host ctx_list = runExceptT $ do
                     ++ (fromMaybe "" $ flip fmap m_mime $ ("/mimeType" ++) . C8.unpack . B64U.encode)
 
     $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
-    rb <- ExceptT $ liftIO $ try $ postWith opts url $
+    rb <- ExceptT $ liftIO $ try $ WS.postWith opts sess url $
                                     UTF8.fromString $ concat $ intersperse "," ctx_list
     asWsResponseNormal' rb
 
 
-uploadByBlocks :: forall m.
-    ( MonadIO m, MonadThrow m, MonadLogger m
-    , MonadReader UploadToken m
-    ) =>
-    OnWsCallError m
-    -> UploadOpDoneReporter m
-    -> Int64            -- ^ block size
-    -> Int64            -- ^ chunk size
-    -> Maybe ResourceKey
-    -> Maybe ByteString     -- ^ optionally specify a mime type
-    -> LB.ByteString    -- ^ content of the file to uploaded
-    -> m (WsResultP UploadedFileInfo)
+uploadByBlocks :: forall m. (QiniuUploadMonad m)
+               => OnWsCallError m
+               -> UploadOpDoneReporter m
+               -> Int64            -- ^ block size
+               -> Int64            -- ^ chunk size
+               -> Maybe ResourceKey
+               -> Maybe ByteString     -- ^ optionally specify a mime type
+               -> LB.ByteString    -- ^ content of the file to uploaded
+               -> m (WsResultP UploadedFileInfo)
 uploadByBlocks on_err on_done block_size chunk_size m_key m_mime bs = runExceptT $ do
     let go cpr_list offset bs_to_upload = do
             let (bs1, bs2) = LB.splitAt block_size bs_to_upload
@@ -294,9 +284,8 @@ doneBytesLength lst = foldr ((+) . cprOffset) 0 lst
 
 
 uploadByBlocksContinue :: forall m.
-    ( MonadIO m, MonadThrow m, MonadLogger m
+    ( QiniuUploadMonad m
     , MonadBaseControl IO m
-    , MonadReader UploadToken m
     ) =>
     OnWsCallError m
     -> UploadOpDoneReporter m
@@ -351,18 +340,15 @@ threadPoolRun thread_num actions = runExceptT $ do
             lift $ mapM restoreM stm_list
 
 
-uploadOneBlockConinue ::
-    ( MonadIO m, MonadThrow m, MonadLogger m
-    , MonadReader UploadToken m
-    ) =>
-    OnWsCallError m
-    -> UploadOpDoneReporter m
-    -> Int64            -- ^ block size
-    -> Int64            -- ^ chunk size
-    -> LB.ByteString    -- ^ content of the whole file to uploaded
-    -> Int64            -- ^ block index
-    -> Maybe ChunkPutResult
-    -> m (WsResultP ChunkPutResult)
+uploadOneBlockConinue :: (QiniuUploadMonad m)
+                      => OnWsCallError m
+                      -> UploadOpDoneReporter m
+                      -> Int64            -- ^ block size
+                      -> Int64            -- ^ chunk size
+                      -> LB.ByteString    -- ^ content of the whole file to uploaded
+                      -> Int64            -- ^ block index
+                      -> Maybe ChunkPutResult
+                      -> m (WsResultP ChunkPutResult)
 uploadOneBlockConinue on_err on_done block_size chunk_size bs idx m_cpr = runExceptT $ do
         let offset          = idx * block_size
         let bs_to_upload    = LB.take block_size $ LB.drop offset bs

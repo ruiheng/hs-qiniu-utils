@@ -45,6 +45,9 @@ library
   other-modules:       Qiniu.HttpClient
                        Qiniu.Utils
 
+  default-extensions:  ConstraintKinds
+                       FlexibleContexts
+
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.9
                      , containers
@@ -152,6 +155,7 @@ executable             qrsync
                      , async
                      , monad-control
                      , directory
+                     , wreq
 
   default-language:    Haskell2010
   ghc-options:         -Wall

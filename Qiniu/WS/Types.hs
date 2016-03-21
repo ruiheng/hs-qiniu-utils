@@ -23,6 +23,7 @@ import Control.Exception                    (Exception)
 import Network.Wreq hiding (statusCode)
 import Control.Lens
 
+
 type WsRespBodyNormal = Map String Value
 
 data WsError = WsError {
