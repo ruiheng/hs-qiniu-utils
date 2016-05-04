@@ -48,6 +48,7 @@ library
   default-extensions:  ConstraintKinds
                        FlexibleContexts
                        NoImplicitPrelude
+                       CPP
 
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.9

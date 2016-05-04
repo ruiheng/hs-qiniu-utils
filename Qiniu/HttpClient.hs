@@ -18,6 +18,9 @@ requestBodyToBsBuilder (RequestBodyBS bs)       = return $ BB.fromByteString bs
 requestBodyToBsBuilder (RequestBodyBuilder _ b) = return $ b
 requestBodyToBsBuilder (RequestBodyStream _ gp) = readAllFromGivesPopper gp
 requestBodyToBsBuilder (RequestBodyStreamChunked gp) = readAllFromGivesPopper gp
+#if MIN_VERSION_http_client(0, 4, 12)
+requestBodyToBsBuilder (RequestBodyIO get_body) = get_body >>= requestBodyToBsBuilder
+#endif
 
 readAllFromGivesPopper :: GivesPopper () -> IO BB.Builder
 readAllFromGivesPopper gp = do
