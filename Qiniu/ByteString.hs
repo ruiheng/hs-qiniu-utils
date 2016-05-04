@@ -1,7 +1,6 @@
 module Qiniu.ByteString where
 
 import ClassyPrelude
-import Data.ByteString                      (ByteString)
 import Data.Bits                            ((.|.))
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Char8      as C8
