@@ -3,33 +3,24 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Main where
 
-import Prelude
+import ClassyPrelude hiding ((<>), delete, try)
 import qualified Data.ByteString.Char8      as C8
 
 import Options.Applicative
-import System.IO
-import System.IO.Error                      (isEOFError)
+import System.IO                            (hSetBuffering, BufferMode(..))
 
-import Data.String                          (fromString)
-import Data.ByteString                      (ByteString)
 import Control.Monad.Logger
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet, LoggerSet)
-import Control.Monad.IO.Class               (MonadIO, liftIO)
-import Control.Monad.Trans.Class            (lift)
-import Control.Monad.Catch                  (MonadCatch, try)
-import Control.Monad.Trans.Reader           (ReaderT(..), runReaderT)
-import Control.Monad.Reader                 (MonadReader, ask)
+import Control.Monad.Catch                  (try)
 
 import qualified Text.Parsec                as TP
 import qualified Text.Parsec.Token          as TPT
 import Text.Parsec.Language                 (haskellDef)
 import Data.Char                            (isSpace, isAlphaNum)
-import Control.Monad                        (void)
 import Network.HTTP.Client                  (newManager, Manager
                                             , defaultManagerSettings
                                             )
 import Data.Conduit                         (($$))
-import Data.Text                            (Text)
 import qualified Data.Conduit.List          as CL
 
 import Qiniu.Types
@@ -222,7 +213,7 @@ interactive secret_key access_key = do
 
     where
         go = do
-            liftIO $ putStr ">"
+            liftIO $ putStr $ fromString ">"
             line <- liftIO getLine
             if line == "quit" || line == "exit"
                 then return ()

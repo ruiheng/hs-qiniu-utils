@@ -2,23 +2,16 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 module Qiniu.WS.Types where
 
-import Prelude
+import ClassyPrelude hiding (catch)
 import qualified Data.ByteString.Lazy       as LB
-import Data.Map                             (Map)
-import qualified Data.Map                   as Map
 import Data.Aeson                           (Value, withObject, (.:)
                                             , FromJSON, parseJSON)
 import qualified Data.Aeson                 as A
-import Control.Monad.Catch                  (MonadThrow, throwM, catch, MonadCatch)
-import Control.Applicative
-import Control.Monad                        (liftM)
-import Control.Monad.Trans.Class            (MonadTrans, lift)
+import Control.Monad.Catch                  (catch)
+import Control.Monad.Trans.Class            (MonadTrans)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Network.HTTP.Client                  (HttpException(..))
 import Network.HTTP.Types                   (statusCode)
-import Data.Maybe                           (fromMaybe)
-import Data.Typeable                        (Typeable)
-import Control.Exception                    (Exception)
 
 import Network.Wreq hiding (statusCode)
 import Control.Lens
@@ -93,7 +86,7 @@ respJsonGetByKey r k = do
     v <- maybe
         (throwM $ JSONError $ "missing key in JSON object: " ++ k)
         return
-        (Map.lookup k $ r ^. responseBody)
+        (lookup k $ r ^. responseBody)
     case A.fromJSON v of
         A.Error err -> throwM $ JSONError $
                         "failed to parse value of key '" ++ k

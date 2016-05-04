@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Qiniu.Security where
 
-import Prelude
-import Data.ByteString                      (ByteString)
+import ClassyPrelude
 import qualified Crypto.Hash.SHA1           as SHA1
 import Crypto.MAC.HMAC                      (hmac)
 import qualified Data.ByteString.Base64.URL as B64U
@@ -14,9 +13,6 @@ import qualified Data.ByteString.UTF8       as UTF8
 import qualified Blaze.ByteString.Builder   as BB
 import qualified Blaze.ByteString.Builder.Char.Utf8 as BBU8
 import Data.Time.Clock.POSIX                (utcTimeToPOSIXSeconds)
-import Data.Time                            (UTCTime)
-import Data.Int                             (Int64)
-import Data.Monoid
 import Network.HTTP.Client                  ( Request )
 import Network.HTTP.Types                   (Header, hAuthorization)
 import qualified Network.HTTP.Client        as HC

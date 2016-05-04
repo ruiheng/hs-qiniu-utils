@@ -3,31 +3,22 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Qiniu.Manage where
 
-import Prelude
+import ClassyPrelude hiding (try)
 import qualified Data.Aeson.TH              as AT
 import qualified Data.ByteString.Base64.URL as B64U
 
-import Data.Text.Encoding                   (encodeUtf8)
-import Data.Int                             (Int64)
-import Data.ByteString                      (ByteString)
 import Data.Default                         (def)
-import Data.Monoid                          ((<>))
 -- import Control.Monad.Logger                 (MonadLogger, logDebugS, logInfoS)
-import Control.Monad.IO.Class               (MonadIO, liftIO)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
-import Control.Monad.Reader.Class           (MonadReader, ask)
-import Control.Monad.Catch                  (MonadCatch, try, throwM)
-import Data.String                          (IsString, fromString)
+import Control.Monad.Catch                  (try)
 import Network.HTTP.Client                  ( httpLbs, Request, Manager, host, path
                                             , urlEncodedBody, setQueryString
                                             )
 import Data.Conduit                         (Source, yield)
-import Data.Maybe                           (fromMaybe)
 
 import Qiniu.Utils                          ( lowerFirst
                                             , ServerTimeStamp(..), UrlSafeEncoded(..)
                                             )
-import Data.Text                            (Text)
 
 import Qiniu.Types
 import Qiniu.Security

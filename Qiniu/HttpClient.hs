@@ -1,11 +1,9 @@
 module Qiniu.HttpClient where
 
-import Prelude
+import ClassyPrelude
 import qualified Blaze.ByteString.Builder   as BB
 import qualified Data.ByteString            as B
 
-import Data.Monoid
-import Data.IORef                           (newIORef, writeIORef, readIORef)
 import Network.HTTP.Client                  ( Request, RequestBody(..) , GivesPopper
                                             , requestHeaders
                                             )

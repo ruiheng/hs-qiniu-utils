@@ -1,27 +1,24 @@
 module Qiniu.Utils where
 
-import Prelude
+import ClassyPrelude
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Char8      as C8
 
-import Data.Char                            (toLower)
+import qualified Data.Char                  as Char
 import Data.Scientific                      (floatingOrInteger)
 import Data.Aeson                           ( withScientific, withText
                                             , FromJSON, parseJSON
                                             , ToJSON, toJSON
                                             , Value
                                             )
-import Data.Time                            (UTCTime)
 import Data.Time.Clock.POSIX                (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
-import Data.ByteString                      (ByteString)
-import Data.Text.Encoding                   (encodeUtf8)
+
 
 lowerFirst :: String -> String
 lowerFirst s =
     case s of
-        c:cs    -> toLower c : cs
+        c:cs    -> Char.toLower c : cs
         _       -> s
-
 
 
 -- | 解释 stat 等接口返回的时间戳。Epoch 时间，以 100 纳秒为单位
