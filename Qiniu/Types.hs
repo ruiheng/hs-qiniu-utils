@@ -47,6 +47,11 @@ encodedEntryUri (bucket, key) =
     B64U.encode $ TE.encodeUtf8 $ fromString $ unBucket bucket ++ ":" ++ unResourceKey key
 
 
+-- | 持久化数据处理的队列
+newtype Pipeline = Pipeline { unPipeline :: Text }
+                        deriving (Eq, Ord, Show, FromJSON, ToJSON)
+
+
 -- | 所有持久化数据处理指令
 class PersistFop a where
   encodeFopToText :: a -> Text

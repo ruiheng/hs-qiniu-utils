@@ -1,6 +1,5 @@
 module Qiniu.PersistOps
   ( PersistentId(..)
-  , Pipeline(..)
   , QiniuPfopMonad
   , AvthumbFormat
   , AvthumbSubOp(..)
@@ -32,9 +31,6 @@ persistOpsApiUrlBase = "http://api.qiniu.com"
 
 
 newtype PersistentId = PersistentId { unPersistentId :: Text }
-                        deriving (Eq, Ord, Show, FromJSON, ToJSON)
-
-newtype Pipeline = Pipeline { unPipeline :: Text }
                         deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
 
