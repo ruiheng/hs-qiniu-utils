@@ -38,6 +38,7 @@ library
                        Qiniu.WS.Types
                        Qiniu.Upload
                        Qiniu.Manage
+                       Qiniu.PersistOps
                        Qiniu.URL
                        Qiniu.Error
                        Qiniu.Config
@@ -49,6 +50,9 @@ library
                        FlexibleContexts
                        NoImplicitPrelude
                        CPP
+                       OverloadedStrings
+                       GeneralizedNewtypeDeriving
+                       ExistentialQuantification
 
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.9
