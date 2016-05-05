@@ -2,6 +2,7 @@
 module Qiniu.Security where
 
 import ClassyPrelude
+import Control.Lens                         (set)
 import qualified Crypto.Hash.SHA1           as SHA1
 import Crypto.MAC.HMAC                      (hmac)
 import qualified Data.ByteString.Base64.URL as B64U
@@ -15,6 +16,7 @@ import qualified Blaze.ByteString.Builder.Char.Utf8 as BBU8
 import Data.Time.Clock.POSIX                (utcTimeToPOSIXSeconds)
 import Network.HTTP.Client                  ( Request )
 import Network.HTTP.Types                   (Header, hAuthorization)
+import Network.Wreq
 import qualified Network.HTTP.Client        as HC
 
 import Qiniu.Types
@@ -134,3 +136,8 @@ applyAccessTokenForReq ::
 applyAccessTokenForReq secret_key access_key req = do
     token <- mkAccessTokenFromReq secret_key access_key req
     return $ replaceReqHttpHeader (accessTokenHeader token) req
+
+
+wreqOptionsAddAccessTokenHeader :: AccessToken -> Options -> Options
+wreqOptionsAddAccessTokenHeader at =
+  set (header hAuthorization) ["QBox " <> unAccessToken at]
