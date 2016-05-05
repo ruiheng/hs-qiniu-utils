@@ -79,25 +79,34 @@ data PutPolicy = PutPolicy {
                     ppScope             :: Scope
                     , ppSaveKey         :: Maybe ResourceKey
                     , ppDeadline        :: UTCTime
+                    , ppPersistentOps   :: [FopCmd]
+                    , ppPersistentNotifyUrl :: Maybe Text
+                    , ppPersistentPipeline  :: Maybe Pipeline
                 }
 
 instance ToJSON PutPolicy where
     toJSON pp =
-        object
-            [ "scope"       .= ppScope pp
-            , "saveKey"     .= fmap unResourceKey (ppSaveKey pp)
-            , "deadline"    .= (round $ utcTimeToPOSIXSeconds $ ppDeadline pp :: Int64)
+        object $ catMaybes
+            [ Just $ "scope"       .= ppScope pp
+            , Just $ "saveKey"     .= fmap unResourceKey (ppSaveKey pp)
+            , Just $ "deadline"    .= (round $ utcTimeToPOSIXSeconds $ ppDeadline pp
+                                        :: Int64)
+            , Just $ "persistentOps" .= encodeFopCmdList (ppPersistentOps pp)
+            , fmap ("persistentNotifyUrl" .=) (ppPersistentNotifyUrl pp)
+            , fmap (("persistentNotifyPipeline" .=) . unPipeline)
+                    (ppPersistentPipeline pp)
             ]
 
 
 mkPutPolicy :: MonadIO m =>
     Scope
     -> Maybe ResourceKey    -- ^ the 'saveKey' field
-    -> NominalDiffTime -> m PutPolicy
+    -> NominalDiffTime
+    -> m PutPolicy
 mkPutPolicy scope save_key dt = liftIO $ do
     now <- getCurrentTime
     let t = addUTCTime dt now
-    return $ PutPolicy scope save_key t
+    return $ PutPolicy scope save_key t [] Nothing Nothing
 
 newtype SecretKey = SecretKey { unSecretKey :: ByteString }
                     deriving (Eq, Ord, Show)
