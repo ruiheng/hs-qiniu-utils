@@ -9,6 +9,7 @@ module Qiniu.PersistOps
   , AvthumbOp(..)
   , PersistOpInfo(..)
   , PfopInfoItem(..)
+  , encodeFopToText'
   , persistOpsOnSaved
   , persistOpsQuery
   ) where
@@ -49,6 +50,14 @@ data SomePersistFop = forall a. PersistFop a => SomePersistFop a
 instance PersistFop SomePersistFop where
   encodeFopToText (SomePersistFop x) = encodeFopToText x
 
+encodeFopToText' :: PersistFop a => a -> Maybe Entry -> Text
+encodeFopToText' x m_save_entry =
+  case m_save_entry of
+    Nothing -> s
+    Just entry -> s <> "|saveas/" <> decodeUtf8 (encodedEntryUri entry)
+  where
+    s = encodeFopToText x
+
 
 -- | 音视频处理的格式参数
 type AvthumbFormat = Text
@@ -78,24 +87,24 @@ instance PersistFop AvthumbOp where
 data PfopResp = PfopResp { unPfopResp :: PersistentId }
 
 instance FromJSON PfopResp where
-  parseJSON = withObject "PfopResp" $ \o -> 
+  parseJSON = withObject "PfopResp" $ \o ->
                 PfopResp <$> o .: "persistentId"
 
 
 -- | 对已有的资源执行持久化数据处理
 persistOpsOnSaved :: QiniuPfopMonad m
                   => AccessToken
-                  -> [SomePersistFop]
-                  -> Bucket
-                  -> ResourceKey
-                  -> Maybe Text
-                  -> Maybe Pipeline
+                  -> [(SomePersistFop, Maybe Entry)]
+                  -> Bucket         -- ^ bucket of input resource
+                  -> ResourceKey    -- ^ key of input resource
+                  -> Maybe Text     -- ^ notify url
+                  -> Maybe Pipeline -- ^ pipeline
                   -> Bool
                   -> m (WsResult PersistentId)
 persistOpsOnSaved atk ops bucket rkey m_notify_url m_pipeline force = runExceptT $ do
   sess <- ask
   let url = persistOpsApiUrlBase <> "/pfop"
-  let fops = mconcat $ intersperse ";" $ map encodeFopToText ops
+  let fops = mconcat $ intersperse ";" $ map (uncurry encodeFopToText') ops
   let opts = defaults & wreqOptionsAddAccessTokenHeader atk
       post_data = catMaybes
                     [ Just $ "bucket" := unBucket bucket
