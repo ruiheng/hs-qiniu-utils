@@ -8,6 +8,7 @@ module Qiniu.PersistOps
   , persistOpStatusFromCode
   , persistOpStatusToCode
   , persistOpStatusSucceeded
+  , persistOpStatusInProgress
   , PersistOpInfo(..)
   , PfopInfoItem(..)
   , persistOpsOnSaved
@@ -140,6 +141,11 @@ persistOpStatusSucceeded :: PersistOpStatus -> Bool
 persistOpStatusSucceeded PersistOpSucceeded    = True
 persistOpStatusSucceeded PersistOpNotifyFailed = True
 persistOpStatusSucceeded _                     = False
+
+persistOpStatusInProgress :: PersistOpStatus -> Bool
+persistOpStatusInProgress PersistOpPending    = True
+persistOpStatusInProgress PersistOpProcessing = True
+persistOpStatusInProgress _                   = False
 
 
 data PersistOpInfo = PersistOpInfo
