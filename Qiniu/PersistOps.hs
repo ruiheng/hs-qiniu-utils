@@ -7,6 +7,9 @@ module Qiniu.PersistOps
   , AvthumbFormat
   , AvthumbSubOp(..)
   , AvthumbOp(..)
+  , PersistOpStatus(..)
+  , persistOpStatusFromCode
+  , persistOpStatusSucceeded
   , PersistOpInfo(..)
   , PfopInfoItem(..)
   , encodeFopToText'
@@ -131,15 +134,26 @@ data PersistOpStatus =  PersistOpSucceeded
                       deriving (Show, Eq)
 
 instance FromJSON PersistOpStatus where
-  parseJSON v = do
-    code <- parseJSON v
-    return $ case code of
-              0 -> PersistOpSucceeded
-              1 -> PersistOpPending
-              2 -> PersistOpProcessing
-              3 -> PersistOpFailed
-              4 -> PersistOpNotifyFailed
-              _ -> PersistOpStautsOther code
+  parseJSON v = persistOpStatusFromCode <$> parseJSON v
+
+
+persistOpStatusFromCode :: Int -> PersistOpStatus
+persistOpStatusFromCode code =
+  case code of
+    0 -> PersistOpSucceeded
+    1 -> PersistOpPending
+    2 -> PersistOpProcessing
+    3 -> PersistOpFailed
+    4 -> PersistOpNotifyFailed
+    _ -> PersistOpStautsOther code
+
+
+-- | PersistOpNotifyFailed 的意义不明，目前认为这为是处理本身是成功的
+-- 只是通知发生错误而已
+persistOpStatusSucceeded :: PersistOpStatus -> Bool
+persistOpStatusSucceeded PersistOpSucceeded    = True
+persistOpStatusSucceeded PersistOpNotifyFailed = True
+persistOpStatusSucceeded _                     = False
 
 
 data PersistOpInfo = PersistOpInfo
