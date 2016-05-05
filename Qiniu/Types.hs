@@ -56,6 +56,19 @@ data SomePersistFop = forall a. PersistFop a => SomePersistFop a
 instance PersistFop SomePersistFop where
   encodeFopToText (SomePersistFop x) = encodeFopToText x
 
+encodeFopToText' :: PersistFop a => a -> Maybe Entry -> Text
+encodeFopToText' x m_save_entry =
+  case m_save_entry of
+    Nothing -> s
+    Just entry -> s <> "|saveas/" <> decodeUtf8 (encodedEntryUri entry)
+  where
+    s = encodeFopToText x
+
+type FopCmd = (SomePersistFop, Maybe Entry)
+
+encodeFopCmdList :: [FopCmd] -> Text
+encodeFopCmdList ops =
+  mconcat $ intersperse ";" $ map (uncurry encodeFopToText') ops
 
 data PutPolicy = PutPolicy {
                     ppScope             :: Scope

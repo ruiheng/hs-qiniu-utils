@@ -10,7 +10,6 @@ module Qiniu.PersistOps
   , persistOpStatusSucceeded
   , PersistOpInfo(..)
   , PfopInfoItem(..)
-  , encodeFopToText'
   , persistOpsOnSaved
   , persistOpsQuery
   ) where
@@ -41,14 +40,6 @@ newtype Pipeline = Pipeline { unPipeline :: Text }
 
 type QiniuPfopMonad m = (MonadIO m, MonadThrow m, MonadLogger m, MonadReader WS.Session m)
 
-
-encodeFopToText' :: PersistFop a => a -> Maybe Entry -> Text
-encodeFopToText' x m_save_entry =
-  case m_save_entry of
-    Nothing -> s
-    Just entry -> s <> "|saveas/" <> decodeUtf8 (encodedEntryUri entry)
-  where
-    s = encodeFopToText x
 
 
 -- | 音视频处理的格式参数
@@ -86,7 +77,7 @@ instance FromJSON PfopResp where
 -- | 对已有的资源执行持久化数据处理
 persistOpsOnSaved :: QiniuPfopMonad m
                   => AccessToken
-                  -> [(SomePersistFop, Maybe Entry)]
+                  -> [FopCmd]
                   -> Bucket         -- ^ bucket of input resource
                   -> ResourceKey    -- ^ key of input resource
                   -> Maybe Text     -- ^ notify url
@@ -96,7 +87,7 @@ persistOpsOnSaved :: QiniuPfopMonad m
 persistOpsOnSaved atk ops bucket rkey m_notify_url m_pipeline force = runExceptT $ do
   sess <- ask
   let url = persistOpsApiUrlBase <> "/pfop"
-  let fops = mconcat $ intersperse ";" $ map (uncurry encodeFopToText') ops
+  let fops = encodeFopCmdList ops
   let opts = defaults & wreqOptionsAddAccessTokenHeader atk
       post_data = catMaybes
                     [ Just $ "bucket" := unBucket bucket
