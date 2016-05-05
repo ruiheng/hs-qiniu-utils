@@ -6,6 +6,7 @@ module Qiniu.PersistOps
   , AvthumbOp(..)
   , PersistOpStatus(..)
   , persistOpStatusFromCode
+  , persistOpStatusToCode
   , persistOpStatusSucceeded
   , PersistOpInfo(..)
   , PfopInfoItem(..)
@@ -106,7 +107,7 @@ data PersistOpStatus =  PersistOpSucceeded
                       | PersistOpProcessing
                       | PersistOpFailed
                       | PersistOpNotifyFailed
-                      | PersistOpStautsOther Int
+                      | PersistOpStatusOther Int
                       deriving (Show, Eq)
 
 instance FromJSON PersistOpStatus where
@@ -121,7 +122,16 @@ persistOpStatusFromCode code =
     2 -> PersistOpProcessing
     3 -> PersistOpFailed
     4 -> PersistOpNotifyFailed
-    _ -> PersistOpStautsOther code
+    _ -> PersistOpStatusOther code
+
+
+persistOpStatusToCode :: PersistOpStatus -> Int
+persistOpStatusToCode PersistOpSucceeded      = 0
+persistOpStatusToCode PersistOpPending        = 1
+persistOpStatusToCode PersistOpProcessing     = 2
+persistOpStatusToCode PersistOpFailed         = 3
+persistOpStatusToCode PersistOpNotifyFailed   = 4
+persistOpStatusToCode(PersistOpStatusOther c) = c
 
 
 -- | PersistOpNotifyFailed 的意义不明，目前认为这为是处理本身是成功的
