@@ -56,11 +56,15 @@ type AvthumbFormat = Text
 -- | 音视频处理
 data AvthumbSubOp = AvthumbOpBitRate Int        -- ^ /ab/<BitRate>
                   | AvthumbOpAudioQuality Int   -- ^ /aq/<AudioQuality>
+                  | AvthumbOpSamplingRate Int   -- ^ 采样频率，单位HZ
+                  | AvthumbOpAudioCodec Text    -- ^ 编码方案．如 libx264
                   deriving (Show, Eq, Ord)
 
 encodeAvthumbOpAsPath :: AvthumbSubOp -> Text
 encodeAvthumbOpAsPath (AvthumbOpBitRate k)      = "ab/" <> tshow k <> "k"
 encodeAvthumbOpAsPath (AvthumbOpAudioQuality q) = "aq/" <> tshow q
+encodeAvthumbOpAsPath (AvthumbOpSamplingRate r) = "ar/" <> tshow r
+encodeAvthumbOpAsPath (AvthumbOpAudioCodec c) = "ar/" <> c
 
 
 -- | 音视频处理完整指令
