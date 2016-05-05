@@ -47,6 +47,16 @@ encodedEntryUri (bucket, key) =
     B64U.encode $ TE.encodeUtf8 $ fromString $ unBucket bucket ++ ":" ++ unResourceKey key
 
 
+-- | 所有持久化数据处理指令
+class PersistFop a where
+  encodeFopToText :: a -> Text
+
+data SomePersistFop = forall a. PersistFop a => SomePersistFop a
+
+instance PersistFop SomePersistFop where
+  encodeFopToText (SomePersistFop x) = encodeFopToText x
+
+
 data PutPolicy = PutPolicy {
                     ppScope             :: Scope
                     , ppSaveKey         :: Maybe ResourceKey

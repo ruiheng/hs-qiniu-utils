@@ -2,8 +2,6 @@ module Qiniu.PersistOps
   ( PersistentId(..)
   , Pipeline(..)
   , QiniuPfopMonad
-  , PersistFop(..)
-  , SomePersistFop(..)
   , AvthumbFormat
   , AvthumbSubOp(..)
   , AvthumbOp(..)
@@ -43,15 +41,6 @@ newtype Pipeline = Pipeline { unPipeline :: Text }
 
 type QiniuPfopMonad m = (MonadIO m, MonadThrow m, MonadLogger m, MonadReader WS.Session m)
 
-
--- | 所有持久化数据处理指令
-class PersistFop a where
-  encodeFopToText :: a -> Text
-
-data SomePersistFop = forall a. PersistFop a => SomePersistFop a
-
-instance PersistFop SomePersistFop where
-  encodeFopToText (SomePersistFop x) = encodeFopToText x
 
 encodeFopToText' :: PersistFop a => a -> Maybe Entry -> Text
 encodeFopToText' x m_save_entry =
