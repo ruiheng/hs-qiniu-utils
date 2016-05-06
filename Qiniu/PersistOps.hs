@@ -15,28 +15,42 @@ module Qiniu.PersistOps
   , persistOpsQuery
   ) where
 
-import ClassyPrelude
-import Control.Lens
+import ClassyPrelude hiding (try)
+import Control.Monad.Catch                  (try)
 import Control.Monad.Logger
 import Control.Monad.Except                 (runExceptT, ExceptT(..))
 import Data.Aeson
-import qualified Network.Wreq.Session       as WS
-import Network.Wreq
+import Data.Default                         (def)
+import Network.HTTP.Client                  ( httpLbs, Request, Manager, host, path
+                                            , urlEncodedBody, setQueryString
+                                            )
 
 import Qiniu.Types
 import Qiniu.Security
 import Qiniu.WS.Types
 
 
-persistOpsApiUrlBase :: String
-persistOpsApiUrlBase = "http://api.qiniu.com"
+
+-- | 持久化接口的接口服务器
+persistOpApiHost :: IsString a => a
+persistOpApiHost = "api.qiniu.com"
+
+persistOpApiReqGet :: ByteString -> Request
+persistOpApiReqGet uri_path =
+    def { host = persistOpApiHost
+        , path = uri_path
+        }
+
+persistOpApiReqPost :: [(ByteString, ByteString)] -> ByteString -> Request
+persistOpApiReqPost post_params uri_path =
+    urlEncodedBody post_params $ persistOpApiReqGet uri_path
 
 
 newtype PersistentId = PersistentId { unPersistentId :: Text }
                         deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
 
-type QiniuPfopMonad m = (MonadIO m, MonadThrow m, MonadLogger m, MonadReader WS.Session m)
+type QiniuPfopMonad m = (MonadIO m, MonadCatch m, MonadLogger m, MonadReader Manager m)
 
 
 
@@ -74,7 +88,8 @@ instance FromJSON PfopResp where
 
 -- | 对已有的资源执行持久化数据处理
 persistOpsOnSaved :: QiniuPfopMonad m
-                  => AccessToken
+                  => SecretKey
+                  -> AccessKey
                   -> [FopCmd]
                   -> Bucket         -- ^ bucket of input resource
                   -> ResourceKey    -- ^ key of input resource
@@ -82,24 +97,25 @@ persistOpsOnSaved :: QiniuPfopMonad m
                   -> Maybe Pipeline -- ^ pipeline
                   -> Bool
                   -> m (WsResult PersistentId)
-persistOpsOnSaved atk ops bucket rkey m_notify_url m_pipeline force = runExceptT $ do
-  sess <- ask
-  let url = persistOpsApiUrlBase <> "/pfop"
-  let fops = encodeFopCmdList ops
-  let opts = defaults & wreqOptionsAddAccessTokenHeader atk
-      post_data = catMaybes
-                    [ Just $ "bucket" := unBucket bucket
-                    , Just $ "key" := unResourceKey rkey
-                    , Just $ "fops" := fops
-                    , flip fmap m_notify_url $ \x -> "notifyURL" := x
-                    , flip fmap m_pipeline $ \pl -> "pipeline" := unPipeline pl
-                    , if force
-                         then Just $ "force" := asText "1"
-                         else Nothing
-                    ]
-
+persistOpsOnSaved secret_key access_key ops bucket rkey m_notify_url m_pipeline force = runExceptT $ do
+  mgmt <- ask
+  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
   fmap (fmap unPfopResp) $ (asWsResponseNormal' =<<) $
-    ExceptT $ liftIO $ try $ WS.postWith opts sess url post_data
+    ExceptT $ try $ liftIO $ httpLbs req' mgmt
+  where
+    url_path    = "/pfop/"
+    fops_cmd    = encodeFopCmdList ops :: Text
+    post_data   = catMaybes
+                  [ Just $ ("bucket", encodeUtf8 (fromString $ unBucket bucket))
+                  , Just $ ("key",  encodeUtf8 (fromString $ unResourceKey rkey))
+                  , Just $ ("fops", (encodeUtf8 fops_cmd :: ByteString))
+                  , flip fmap m_notify_url $ \x -> ("notifyURL", encodeUtf8 x)
+                  , flip fmap m_pipeline $ \pl -> ("pipeline", encodeUtf8 (unPipeline pl))
+                  , if force
+                       then Just $ ("force", "1")
+                       else Nothing
+                  ]
+    req         = persistOpApiReqPost post_data url_path
 
 
 -- | 持久化处理结果状态码
@@ -195,12 +211,18 @@ instance FromJSON PfopInfoItem where
 
 -- | 持久化处理状态查询
 persistOpsQuery :: QiniuPfopMonad m
-                => PersistentId
+                => SecretKey
+                -> AccessKey
+                -> PersistentId
                 -> m (WsResult PersistOpInfo)
-persistOpsQuery pid = runExceptT $ do
-  sess <- ask
-  let url = persistOpsApiUrlBase <> "/prefop"
-      opts = defaults & param "id" .~ [ unPersistentId pid ]
-
+persistOpsQuery secret_key access_key pid = runExceptT $ do
+  mgmt <- ask
+  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
   (asWsResponseNormal' =<<) $
-    ExceptT $ liftIO $ try $ WS.getWith opts sess url
+    ExceptT $ try $ liftIO $ httpLbs req' mgmt
+  where
+    url_path    = "/status/get/prefop"
+    req         = setQueryString
+                    [ ("id",    Just (encodeUtf8 $ unPersistentId pid))
+                    ]
+                    $ persistOpApiReqPost [] url_path
