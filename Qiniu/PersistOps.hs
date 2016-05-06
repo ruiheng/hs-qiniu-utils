@@ -91,13 +91,12 @@ persistOpsOnSaved :: QiniuPfopMonad m
                   => SecretKey
                   -> AccessKey
                   -> [FopCmd]
-                  -> Bucket         -- ^ bucket of input resource
-                  -> ResourceKey    -- ^ key of input resource
+                  -> Entry          -- ^ input resource
                   -> Maybe Text     -- ^ notify url
                   -> Maybe Pipeline -- ^ pipeline
                   -> Bool
                   -> m (WsResult PersistentId)
-persistOpsOnSaved secret_key access_key ops bucket rkey m_notify_url m_pipeline force = runExceptT $ do
+persistOpsOnSaved secret_key access_key ops (bucket, rkey) m_notify_url m_pipeline force = runExceptT $ do
   mgmt <- ask
   req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
   fmap (fmap unPfopResp) $ (asWsResponseNormal' =<<) $
