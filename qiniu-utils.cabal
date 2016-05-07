@@ -23,6 +23,10 @@ Flag library-only
     Description:   Build for library only
     Default:       False
 
+Flag persistent
+    Description:   Build with persistent library support
+    Default:       True
+
 Flag dev
     Description:   Turn on development settings, like disable optimization.
     Default:       True
@@ -53,6 +57,7 @@ library
                        OverloadedStrings
                        GeneralizedNewtypeDeriving
                        ExistentialQuantification
+                       StandaloneDeriving
 
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.9
@@ -90,6 +95,11 @@ library
   -- hs-source-dirs:      
   default-language:    Haskell2010
   ghc-options:         -Wall
+
+  if flag(persistent)
+      cpp-options:   -DPERSISTENT
+      build-depends: persistent
+
 
   if flag(dev)
       cpp-options:   -DDEVELOPMENT

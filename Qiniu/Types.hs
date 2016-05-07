@@ -7,6 +7,10 @@ import ClassyPrelude
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.Aeson.TH              as AT
 import qualified Data.Text.Encoding         as TE
+#if defined(PERSISTENT)
+import Database.Persist                     (PersistField)
+import Database.Persist.Sql                 (PersistFieldSql)
+#endif
 
 import Data.Time.Clock.POSIX                (utcTimeToPOSIXSeconds)
 import Data.Aeson                           (FromJSON, ToJSON, toJSON, object, (.=))
@@ -14,11 +18,24 @@ import Data.Time                            (NominalDiffTime, addUTCTime)
 import Network.URI                          (isUnreserved, escapeURIString)
 
 
+#if defined(PERSISTENT)
+#define DERIVE_PERSIST(x) \
+deriving instance PersistField x;\
+deriving instance PersistFieldSql x
+#else
+#define DERIVE_PERSIST(x)
+#endif
 newtype Bucket = Bucket { unBucket :: String }
                 deriving (Eq, Ord, Show)
 
+DERIVE_PERSIST(Bucket)
+
+
 newtype ResourceKey = ResourceKey { unResourceKey :: String }
                 deriving (Eq, Ord, Show, FromJSON, ToJSON)
+
+DERIVE_PERSIST(ResourceKey)
+
 
 data Scope = Scope Bucket (Maybe ResourceKey)
                 deriving (Eq, Ord)
@@ -50,6 +67,8 @@ encodedEntryUri (bucket, key) =
 -- | 持久化数据处理的队列
 newtype Pipeline = Pipeline { unPipeline :: Text }
                         deriving (Eq, Ord, Show, FromJSON, ToJSON)
+
+DERIVE_PERSIST(Pipeline)
 
 
 -- | 所有持久化数据处理指令

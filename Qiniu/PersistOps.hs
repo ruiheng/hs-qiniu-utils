@@ -21,6 +21,10 @@ import Control.Monad.Logger
 import Control.Monad.Except                 (runExceptT, ExceptT(..))
 import Data.Aeson
 import Data.Default                         (def)
+#if defined(PERSISTENT)
+import Database.Persist                     (PersistField)
+import Database.Persist.Sql                 (PersistFieldSql)
+#endif
 import Network.HTTP.Client                  ( httpLbs, Request, Manager, host, path
                                             , urlEncodedBody, setQueryString
                                             )
@@ -49,6 +53,10 @@ persistOpApiReqPost post_params uri_path =
 newtype PersistentId = PersistentId { unPersistentId :: Text }
                         deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
+#if defined(PERSISTENT)
+deriving instance PersistField PersistentId
+deriving instance PersistFieldSql PersistentId
+#endif
 
 type QiniuPfopMonad m = (MonadIO m, MonadCatch m, MonadLogger m, MonadReader Manager m)
 
