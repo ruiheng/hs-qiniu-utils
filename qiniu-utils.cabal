@@ -47,9 +47,12 @@ library
 
   default-extensions:  ConstraintKinds
                        FlexibleContexts
+                       NoImplicitPrelude
+                       CPP
 
   -- other-extensions:    
   build-depends:       base >=4 && <5
+                     , classy-prelude
                      , containers
                      , bytestring
                      , base64-bytestring
@@ -121,7 +124,9 @@ executable             qetag
   hs-source-dirs:      tools
 
   build-depends:       base
+                     , classy-prelude
                      , bytestring
+                     , text
                      , qiniu-utils
 
   default-language:    Haskell2010
@@ -133,6 +138,9 @@ executable             qetag
   else
       ghc-options:   -O
 
+  default-extensions:  ConstraintKinds
+                       FlexibleContexts
+                       NoImplicitPrelude
 
 executable             qrsync
   if flag(library-only)
@@ -142,6 +150,7 @@ executable             qrsync
   hs-source-dirs:      tools
 
   build-depends:       base
+                     , classy-prelude
                      , bytestring
                      , qiniu-utils
                      , optparse-applicative >= 0.10
@@ -166,6 +175,10 @@ executable             qrsync
   else
       ghc-options:   -O
 
+  default-extensions:  ConstraintKinds
+                       FlexibleContexts
+                       NoImplicitPrelude
+
 executable             qmanage
   if flag(library-only)
       Buildable: False
@@ -174,6 +187,7 @@ executable             qmanage
   hs-source-dirs:      tools
 
   build-depends:       base
+                     , classy-prelude
                      , bytestring
                      , qiniu-utils
                      , optparse-applicative >= 0.10
@@ -195,3 +209,7 @@ executable             qmanage
       ghc-options:   -O0
   else
       ghc-options:   -O
+
+  default-extensions:  ConstraintKinds
+                       FlexibleContexts
+                       NoImplicitPrelude

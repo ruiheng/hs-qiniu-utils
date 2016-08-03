@@ -1,10 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Qiniu.Config where
 
-import Prelude
-import Control.Monad
+import ClassyPrelude
 import Data.Aeson
-import Data.String
 
 import Qiniu.Types
 

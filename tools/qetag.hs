@@ -1,11 +1,9 @@
 module Main where
 
-import Prelude
+import ClassyPrelude
+import qualified Data.Text as T
 import Qiniu.ByteString
-import System.Environment
 import System.Exit                          (exitFailure)
-import System.IO                            (stderr, hPutStrLn)
-import Control.Monad                        (when, forM_)
 
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Char8      as B8
@@ -14,7 +12,7 @@ printETag :: Bool -> FilePath -> IO ()
 printETag print_name name = do
     etag <- fmap hetagL $ LB.readFile name
     when print_name $
-        putStr $ name ++ ": "
+      putStr $ fromString $ name <> ": "
     B8.putStrLn etag
 
 main :: IO ()
@@ -25,7 +23,7 @@ main = do
             hPutStrLn stderr $ "Usage: qetag <filename> [<filename> ...]"
             exitFailure
         else do
-            forM_ fnames $ printETag $
+            forM_ (map T.unpack fnames) $ printETag $
                             case fnames of
                                 (_:[])  -> False
                                 _       -> True

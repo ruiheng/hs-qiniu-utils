@@ -5,38 +5,25 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
-import Prelude
+import ClassyPrelude hiding (catch, (<>))
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString            as B
-import qualified Data.Map                   as Map
 import qualified Data.Yaml                  as Y
 import qualified Data.ByteString.Char8      as C8
 import qualified Control.Monad.Trans.State  as S
 import qualified Network.Wreq.Session       as WS
-import Data.ByteString                      (ByteString)
-import Data.String                          (fromString)
-import Data.List                            (nub)
-import Control.Monad.Trans.Reader           (ReaderT(..), runReaderT)
-import Control.Monad.Reader.Class           (ask)
 import Control.Monad.Logger                 (MonadLogger, runLoggingT, Loc
                                             , LogLevel(..), defaultLogStr
                                             , LogSource, logInfo)
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
                                             , LoggerSet, LogStr)
-import Control.Monad.Catch                  (MonadThrow, catch, throwM)
-import Control.Monad.IO.Class               (MonadIO, liftIO)
-import Control.Monad                        (when)
+import Control.Monad.Catch                  (catch)
 import Control.Monad.Trans.Control          (MonadBaseControl, control)
-import Data.Maybe                           (listToMaybe, catMaybes, fromMaybe)
-import Data.Int                             (Int64)
 import Numeric                              (readDec)
-import Control.Concurrent.Chan              (newChan, writeChan, Chan)
 import Control.Concurrent.Async             (withAsync, wait)
 import Options.Applicative
-import System.IO
 import System.Exit
 import System.Directory                     (removeFile)
-import System.IO.Error                      (isDoesNotExistError)
 import Text.Printf                          (printf)
 
 import Qiniu.Types
@@ -130,7 +117,7 @@ parseOptions = RsyncOptions <$>
                             <> help "Coninue/Recover mode.")
 
 parseFileNames :: Parser [FilePath]
-parseFileNames = fmap nub $ some $ argument str $ metavar "FILES..."
+parseFileNames = fmap ordNub $ some $ argument str $ metavar "FILES..."
 
 uploadOneFile :: (MonadIO m, MonadThrow m, MonadLogger m) =>
     WS.Session ->FilePath -> ReaderT RsyncOptions m ()
@@ -154,8 +141,8 @@ uploadOneFile sess fp = do
                 hPutStrLn stderr $ "Web Service Error: " ++ show err
             Right (Right (UploadedFileInfo etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
-                putStrLn $ "File '" ++ fp ++ "' uploaded to " ++ show scope
-                putStrLn $ "ETag: " ++ etag
+                putStrLn $ fromString $ "File '" <> fp <> "' uploaded to " <> show scope
+                putStrLn $ fromString $ "ETag: " <> etag
 
 
 lookupStateFile :: (MonadIO m) =>
@@ -203,14 +190,14 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
 
     let watch_ch state_file = onDoneChanWatcher done_ch $ \offset cpr -> do
             cpr_map <- S.get
-            let new_cpr_map = Map.insert
+            let new_cpr_map = insertMap
                                 (offset `div` block_size) cpr
                                 cpr_map
             let rui = cprMapToRecoverUploadInfo
                         block_size chunk_size rkey m_mime new_cpr_map
             when cr_mode $ do
                 liftIO $ B.writeFile state_file $ Y.encode rui
-            let done_len = doneBytesLength $ map snd $ Map.toList new_cpr_map
+            let done_len = doneBytesLength $ map snd $ mapToList new_cpr_map
                 total_len = LB.length bs
             $(logInfo) $ fromString $
                 show done_len
@@ -247,8 +234,8 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
                 hPutStrLn stderr $ "Web Service Error: " ++ show err
             Right (Right (UploadedFileInfo r_etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
-                putStrLn $ "File '" ++ fp ++ "' uploaded to " ++ show scope
-                putStrLn $ "ETag: " ++ r_etag
+                putStrLn $ fromString $ "File '" ++ fp ++ "' uploaded to " ++ show scope
+                putStrLn $ fromString $ "ETag: " ++ r_etag
 
                 -- delete state file only server reports success
                 when cr_mode $ do

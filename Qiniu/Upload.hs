@@ -6,38 +6,20 @@
 {-# LANGUAGE CPP #-}
 module Qiniu.Upload where
 
-import Prelude
+import ClassyPrelude hiding (try, finally)
 import qualified Data.Text                  as T
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Aeson.TH              as AT
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Char8      as C8
-#if !MIN_VERSION_base(4, 8, 0)
-import Control.Applicative                  ((<$>), (<*>))
-#endif
-import Data.Maybe                           (catMaybes, fromMaybe)
-import Data.String                          (fromString)
-import Data.ByteString                      (ByteString)
+import qualified Data.Map                   as Map
 import qualified Data.ByteString.UTF8       as UTF8
-import Data.List                            (intersperse, isPrefixOf)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
-import Control.Monad.Trans.Class            (lift)
-import Control.Monad                        (liftM, foldM)
-import Control.Monad.IO.Class               (MonadIO, liftIO)
-import Control.Monad.Catch                  (MonadThrow, try, finally, throwM)
-import Data.Monoid                          ((<>))
-import Data.Int                             (Int64)
-import Data.Char                            (toLower)
-import Control.Monad.Reader.Class           (MonadReader, ask)
+import Control.Monad.Catch                  (try, finally)
 import Control.Monad.Logger                 (MonadLogger, logDebugS, logInfoS)
 import Control.Monad.Trans.Control          (MonadBaseControl, liftBaseWith, restoreM)
-import Control.Concurrent.STM.TVar          (newTVarIO, readTVar, modifyTVar, writeTVar)
-import Control.Concurrent.STM               (atomically, check)
+import Control.Concurrent.STM               (check)
 import Control.Concurrent.Async             (async, waitCatch)
-import Control.Concurrent.Chan              (readChan, writeChan, Chan)
-import Control.Exception                    (SomeException)
-import Data.Map                             (Map)
-import qualified Data.Map                   as Map
 import Data.Aeson                           (FromJSON, ToJSON, parseJSON, toJSON
                                             , object, withObject, (.:), (.:?), (.=))
 
@@ -84,7 +66,7 @@ data ChunkPutResult = ChunkPutResult {
                 deriving (Eq, Show)
 
 $(AT.deriveJSON
-    AT.defaultOptions{AT.fieldLabelModifier = map toLower . drop 3}
+    AT.defaultOptions{AT.fieldLabelModifier = toLower . drop 3}
     ''ChunkPutResult)
 
 respJsonGetChunkPutResult :: (MonadThrow m) =>
@@ -225,7 +207,8 @@ uploadByBlocks on_err on_done block_size chunk_size m_key m_mime bs = runExceptT
     cprs <- go [] 0 bs
     ExceptT $ retryWsCall "uploadMkfile" on_err $
                 liftM packError $ uploadMkfile (LB.length bs) m_key m_mime
-                                    (cprHost $ head cprs)
+                                    (cprHost $
+                                      fromMaybe (error "cprs should never be empty") $ listToMaybe cprs)
                                     (reverse $ map cprCtx cprs)
 
 -- | 断点续传所需的信息
@@ -267,16 +250,16 @@ cprMapToRecoverUploadInfo ::
 cprMapToRecoverUploadInfo block_size chunk_size m_key m_mime cpr_map =
     RecoverUploadInfo cpr_list block_size chunk_size m_key m_mime
     where
-        cpr_list = if Map.null cpr_map
+        cpr_list = if null cpr_map
                     then []
                     else flip map [0..(fst $ Map.findMax cpr_map)] $ \idx ->
-                            Map.lookup idx cpr_map
+                            lookup idx cpr_map
 
 cprMapFromRecoverUploadInfo ::
     RecoverUploadInfo
     -> Map Int64 ChunkPutResult
 cprMapFromRecoverUploadInfo rui =
-    Map.fromList $ catMaybes $
+    mapFromList $ catMaybes $
         zipWith (\x y -> fmap (x,) y) [0..] $ ruiBlockLastCPR rui
 
 doneBytesLength :: [ChunkPutResult] -> Int64
@@ -293,7 +276,7 @@ uploadByBlocksContinue :: forall m.
     -> RecoverUploadInfo
     -> LB.ByteString    -- ^ content of the file to uploaded
     -> m (WsResultP UploadedFileInfo)
-uploadByBlocksContinue on_err on_done thread_num rui bs = runExceptT $ do
+uploadByBlocksContinue on_err on_done thread_num0 rui bs = runExceptT $ do
     let block_size  = ruiBlockSize rui
         chunk_size  = ruiChunkSize rui
         m_key       = ruiResourceKey rui
@@ -311,8 +294,12 @@ uploadByBlocksContinue on_err on_done thread_num rui bs = runExceptT $ do
     cprs <- threadPoolRun thread_num actions >>= either throwM return
     ExceptT $ retryWsCall "uploadMkfile" on_err $
                 liftM packError $ uploadMkfile (LB.length bs) m_key m_mime
-                                    (cprHost $ last cprs)
+                                    (cprHost $ fromMaybe
+                                                  (error "cprs should never be empty")
+                                                  (listToMaybe $ reverse cprs))
                                     (map cprCtx cprs)
+    where
+      thread_num = max 1 thread_num0
 
 threadPoolRun :: (MonadIO m, MonadBaseControl IO m, MonadLogger m) =>
     Int

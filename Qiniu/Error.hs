@@ -1,6 +1,6 @@
 module Qiniu.Error where
 
-import Prelude
+import ClassyPrelude
 
 import Network.HTTP.Client                  (HttpException(..))
 import Qiniu.WS.Types

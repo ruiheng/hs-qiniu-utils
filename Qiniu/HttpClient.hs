@@ -1,11 +1,9 @@
 module Qiniu.HttpClient where
 
-import Prelude
+import ClassyPrelude
 import qualified Blaze.ByteString.Builder   as BB
 import qualified Data.ByteString            as B
 
-import Data.Monoid
-import Data.IORef                           (newIORef, writeIORef, readIORef)
 import Network.HTTP.Client                  ( Request, RequestBody(..) , GivesPopper
                                             , requestHeaders
                                             )
@@ -20,6 +18,9 @@ requestBodyToBsBuilder (RequestBodyBS bs)       = return $ BB.fromByteString bs
 requestBodyToBsBuilder (RequestBodyBuilder _ b) = return $ b
 requestBodyToBsBuilder (RequestBodyStream _ gp) = readAllFromGivesPopper gp
 requestBodyToBsBuilder (RequestBodyStreamChunked gp) = readAllFromGivesPopper gp
+#if MIN_VERSION_http_client(0, 4, 12)
+requestBodyToBsBuilder (RequestBodyIO get_body) = get_body >>= requestBodyToBsBuilder
+#endif
 
 readAllFromGivesPopper :: GivesPopper () -> IO BB.Builder
 readAllFromGivesPopper gp = do

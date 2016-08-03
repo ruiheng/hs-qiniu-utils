@@ -1,9 +1,6 @@
 module Qiniu.URL where
 
-import Prelude
-import Data.String
-import Data.Maybe
-import Data.Time
+import ClassyPrelude
 
 import Qiniu.Types
 import Qiniu.Security
