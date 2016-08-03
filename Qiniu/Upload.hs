@@ -19,7 +19,12 @@ import Control.Monad.Catch                  (try, finally)
 import Control.Monad.Logger                 (MonadLogger, logDebugS, logInfoS)
 import Control.Monad.Trans.Control          (MonadBaseControl, liftBaseWith, restoreM)
 import Control.Concurrent.STM               (check)
-import Control.Concurrent.Async             (async, waitCatch)
+
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+import Control.Concurrent.Async             (async)
+#endif
+import Control.Concurrent.Async             (waitCatch)
+
 import Data.Aeson                           (FromJSON, ToJSON, parseJSON, toJSON
                                             , object, withObject, (.:), (.:?), (.=))
 
