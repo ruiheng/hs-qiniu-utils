@@ -1,11 +1,17 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import ClassyPrelude hiding ((<>), delete, try)
-import qualified Data.ByteString.Char8      as C8
+import ClassyPrelude hiding (delete, try
+#if !MIN_VERSION_optparse_applicative(0, 13, 0)
+                            , (<>)
+#endif
+                            )
 
+import qualified Data.ByteString.Char8      as C8
+import qualified Data.Text.IO               as T
 import Options.Applicative
 import System.IO                            (hSetBuffering, BufferMode(..))
 
@@ -60,7 +66,7 @@ data Command = Stat Entry
             | Fetch Text Scope
             deriving (Show)
 
-parseCommand :: CharParser (Maybe Command)
+parseCommand :: TP.ParsecT String u Identity (Maybe Command)
 parseCommand = do
     TP.spaces
     cmd <- TP.many $ TP.satisfy (not . isSpace)
@@ -165,9 +171,9 @@ printResult :: MonadIO m =>
 printResult f ws_result = do
     case ws_result of
         Left http_err -> do
-            liftIO $ hPutStrLn stderr $ "HTTP Error: " ++ show http_err
+            liftIO $ T.hPutStrLn stderr $ "HTTP Error: " <> tshow http_err
         Right (Left err) -> do
-            liftIO $ hPutStrLn stderr $ "Web Service Error: " ++ show err
+            liftIO $ T.hPutStrLn stderr $ "Web Service Error: " <> tshow err
         Right (Right x) -> do
             f x
 
@@ -207,20 +213,20 @@ interactive secret_key access_key = do
         Left err -> if isEOFError err
                         then return ()
                         else do
-                            liftIO $ hPutStrLn stderr $ show err
+                            liftIO $ T.hPutStrLn stderr $ tshow err
                             return ()
         Right _  -> return ()
 
     where
         go = do
             liftIO $ putStr $ fromString ">"
-            line <- liftIO getLine
+            line <- liftIO T.getLine
             if line == "quit" || line == "exit"
                 then return ()
                 else do
-                    case TP.parse parseCommand "" line of
-                        Left err -> liftIO $ hPutStrLn stderr $
-                                        "cannot parse command: " ++ show err
+                    case TP.parse parseCommand "" (unpack line) of
+                        Left err -> liftIO $ T.hPutStrLn stderr $
+                                        "cannot parse command: " <> tshow err
                         Right Nothing -> return ()
 
                         Right (Just cmd) -> processCmd secret_key access_key cmd

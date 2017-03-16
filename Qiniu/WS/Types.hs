@@ -11,6 +11,9 @@ import Control.Monad.Catch                  (catch)
 import Control.Monad.Trans.Class            (MonadTrans)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Network.HTTP.Client                  (HttpException(..))
+#if MIN_VERSION_http_client(0, 5, 0)
+import Network.HTTP.Client                  (HttpExceptionContent(..), responseStatus)
+#endif
 import Network.HTTP.Types                   (statusCode)
 
 import Network.Wreq hiding (statusCode)
@@ -111,24 +114,34 @@ type WsResultP a = Either (Either HttpException WsError) a
 -- 这个函数的责任就是从两个地方提取提取错误代码
 wsErrorCode :: Either HttpException WsError
             -> Maybe Int
+#if MIN_VERSION_http_client(0, 5, 0)
+wsErrorCode (Left (InvalidUrlException {}))                              = Nothing
+wsErrorCode (Left (HttpExceptionRequest _ (StatusCodeException resp _))) = Just $ statusCode $ Network.HTTP.Client.responseStatus resp
+wsErrorCode (Left _)                                                     = Nothing
+#else
 wsErrorCode (Left (StatusCodeException status _ _)) = Just $ statusCode status
+wsErrorCode (Left _)                                = Nothing
+#endif
 wsErrorCode (Right e)                               = Just $ __wsHttpCode e
-wsErrorCode _                                       = Nothing
+
 
 testWsErrorCode :: (Int -> Bool)
                 -> Either HttpException WsError
                 -> Bool
 testWsErrorCode f e = fromMaybe False $ wsErrorCode e >>= return . f
 
+
 packError :: WsResult a -> WsResultP a
 packError (Left x)          = Left $ Left x
 packError (Right (Left x))  = Left $ Right x
 packError (Right (Right x)) = Right x
 
+
 unpackError :: WsResultP a -> WsResult a
 unpackError (Left (Left x))     = Left x
 unpackError (Left (Right x))    = Right (Left x)
 unpackError (Right x)           = Right (Right x)
+
 
 tryWsResult :: MonadCatch m => m a -> m (WsResultP a)
 tryWsResult f = do
@@ -136,6 +149,7 @@ tryWsResult f = do
     where
         h1 = return . Left . Left
         h2 = return . Left . Right
+
 
 -- | 根据 retryWsCall 的实现，这种函数不但实现错误报告
 -- 还可以实现错误时重试的时间间隔（直接 threadDelay）
@@ -149,9 +163,15 @@ nopOnWsCallError max_try _ call_cnt _ = return $ max_try > call_cnt
 -- 但现在没有足够的信息决定哪些错误情况适合重试
 -- 要根据以后调试过程的经验完善
 resumableError :: Int -> Either HttpException WsError -> Bool
+#if MIN_VERSION_http_client(0, 5, 0)
+resumableError _ (Left (HttpExceptionRequest _ (ResponseTimeout)))                = True
+resumableError _ (Left (HttpExceptionRequest _ (ConnectionFailure {})))  = True
+resumableError _ (Left (HttpExceptionRequest _ (ConnectionClosed {}))) = True
+#else
 resumableError _ (Left ResponseTimeout)                 = True
 resumableError _ (Left (FailedConnectionException {}))  = True
 resumableError _ (Left (FailedConnectionException2 {})) = True
+#endif
 resumableError _ _                                      = False
 
 -- | used with retryWhile
