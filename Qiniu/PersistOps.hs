@@ -20,13 +20,13 @@ import Control.Monad.Catch                  (try)
 import Control.Monad.Logger
 import Control.Monad.Except                 (runExceptT, ExceptT(..))
 import Data.Aeson
-import Data.Default                         (def)
 #if defined(PERSISTENT)
 import Database.Persist                     (PersistField)
 import Database.Persist.Sql                 (PersistFieldSql)
 #endif
 import Network.HTTP.Client                  ( httpLbs, Request, Manager, host, path
                                             , urlEncodedBody, setQueryString
+                                            , defaultRequest
                                             )
 
 import Qiniu.Types
@@ -41,7 +41,8 @@ persistOpApiHost = "api.qiniu.com"
 
 persistOpApiReqGet :: ByteString -> Request
 persistOpApiReqGet uri_path =
-    def { host = persistOpApiHost
+  defaultRequest
+        { host = persistOpApiHost
         , path = uri_path
         }
 
