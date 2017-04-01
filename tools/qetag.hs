@@ -2,6 +2,7 @@ module Main where
 
 import ClassyPrelude
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Qiniu.ByteString
 import System.Exit                          (exitFailure)
 
@@ -20,7 +21,7 @@ main = do
     fnames <- getArgs
     if null fnames
         then do
-            hPutStrLn stderr $ "Usage: qetag <filename> [<filename> ...]"
+            T.hPutStrLn stderr $ fromString $ "Usage: qetag <filename> [<filename> ...]"
             exitFailure
         else do
             forM_ (map T.unpack fnames) $ printETag $

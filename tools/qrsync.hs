@@ -3,13 +3,19 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import ClassyPrelude hiding (catch, (<>))
+import ClassyPrelude hiding (catch
+#if !MIN_VERSION_optparse_applicative(0, 13, 0)
+                            , (<>)
+#endif
+                            )
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString            as B
 import qualified Data.Yaml                  as Y
 import qualified Data.ByteString.Char8      as C8
+import qualified Data.Text.IO               as T
 import qualified Control.Monad.Trans.State  as S
 import qualified Network.Wreq.Session       as WS
 import Control.Monad.Logger                 (MonadLogger, runLoggingT, Loc
@@ -20,7 +26,12 @@ import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
 import Control.Monad.Catch                  (catch)
 import Control.Monad.Trans.Control          (MonadBaseControl, control)
 import Numeric                              (readDec)
-import Control.Concurrent.Async             (withAsync, wait)
+
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+import Control.Concurrent.Async             (withAsync)
+#endif
+import Control.Concurrent.Async             (wait)
+
 import Options.Applicative
 import System.Exit
 import System.Directory                     (removeFile)
@@ -136,9 +147,9 @@ uploadOneFile sess fp = do
     liftIO $ do
         case ws_result of
             Left http_err -> do
-                hPutStrLn stderr $ "HTTP Error: " ++ show http_err
+                T.hPutStrLn stderr $ "HTTP Error: " <> tshow http_err
             Right (Left err) -> do
-                hPutStrLn stderr $ "Web Service Error: " ++ show err
+                T.hPutStrLn stderr $ "Web Service Error: " <> tshow err
             Right (Right (UploadedFileInfo etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
                 putStrLn $ fromString $ "File '" <> fp <> "' uploaded to " <> show scope
@@ -229,9 +240,9 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
     liftIO $ do
         case unpackError ws_result of
             Left http_err -> do
-                hPutStrLn stderr $ "HTTP Error: " ++ show http_err
+                T.hPutStrLn stderr $ "HTTP Error: " <> tshow http_err
             Right (Left err) -> do
-                hPutStrLn stderr $ "Web Service Error: " ++ show err
+                T.hPutStrLn stderr $ "Web Service Error: " <> tshow err
             Right (Right (UploadedFileInfo r_etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
                 putStrLn $ fromString $ "File '" ++ fp ++ "' uploaded to " ++ show scope
@@ -242,7 +253,7 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
                     removeIfExists state_fp
 
                 when (r_etag /= C8.unpack etag) $ do
-                    hPutStrLn stderr $ "etag mismatch"
+                    T.hPutStrLn stderr $ "etag mismatch"
                     exitFailure
 
 start :: (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m) =>

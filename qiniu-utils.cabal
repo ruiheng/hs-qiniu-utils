@@ -178,6 +178,7 @@ executable             qrsync
                      , async
                      , monad-control
                      , directory
+                     , text
                      , wreq
 
   default-language:    Haskell2010

@@ -7,12 +7,12 @@ import ClassyPrelude hiding (try)
 import qualified Data.Aeson.TH              as AT
 import qualified Data.ByteString.Base64.URL as B64U
 
-import Data.Default                         (def)
 -- import Control.Monad.Logger                 (MonadLogger, logDebugS, logInfoS)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Control.Monad.Catch                  (try)
 import Network.HTTP.Client                  ( httpLbs, Request, Manager, host, path
                                             , urlEncodedBody, setQueryString
+                                            , defaultRequest
                                             )
 import Data.Conduit                         (Source, yield)
 
@@ -31,7 +31,8 @@ manageApiHost = "rs.qiniu.com"
 
 manageApiReqGet :: ByteString -> Request
 manageApiReqGet uri_path =
-    def { host = manageApiHost
+    defaultRequest
+        { host = manageApiHost
         , path = uri_path
         }
 
