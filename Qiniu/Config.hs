@@ -1,20 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Qiniu.Config where
 
+-- {{{1 imports
 import ClassyPrelude
 import Data.Aeson
 
 import Qiniu.Types
+-- }}}1
 
 
-data QiniuConfig = QiniuConfig {
-                    qiniuConfigSecretKey    :: SecretKey
-                    , qiniuConfigAccessKey  :: AccessKey
-                    , qiniuConfigBucket     :: Bucket
-                    , qiniuConfigDomain     :: Maybe String
-                    }
-                    deriving (Eq, Show)
+data QiniuConfig =
+       QiniuConfig
+         { qiniuConfigSecretKey :: SecretKey
+         , qiniuConfigAccessKey :: AccessKey
+         , qiniuConfigBucket :: Bucket
+         , qiniuConfigDomain :: Maybe String
+         }
+  deriving (Eq, Show)
 
+-- {{{1 instances
 instance FromJSON QiniuConfig where
     parseJSON = withObject "QiniuConfig" $ \o ->
         QiniuConfig
@@ -30,19 +34,22 @@ instance FromJSON QiniuConfig where
 
             nullToMaybe Nothing = Nothing
             nullToMaybe (Just x) = if null x then Nothing else Just x
+-- }}}1
 
 
 -- | 包含一个公开 bucket, 一个私有 bucket 的设置
-data QiniuDualConfig = QiniuDualConfig {
-                    qcDualSecretKey         :: SecretKey
-                    , qcDualAccessKey       :: AccessKey
-                    , qcDualPublicBucket    :: Bucket
-                    , qcDualPublicDomain    :: Maybe String
-                    , qcDualPrivateBucket   :: Bucket
-                    , qcDualPrivateDomain   :: Maybe String
-                    }
-                    deriving (Eq, Show)
+data QiniuDualConfig =
+       QiniuDualConfig
+         { qcDualSecretKey :: SecretKey
+         , qcDualAccessKey :: AccessKey
+         , qcDualPublicBucket :: Bucket
+         , qcDualPublicDomain :: Maybe String
+         , qcDualPrivateBucket :: Bucket
+         , qcDualPrivateDomain :: Maybe String
+         }
+  deriving (Eq, Show)
 
+-- {{{1 instances
 instance FromJSON QiniuDualConfig where
     parseJSON = withObject "QiniuDualConfig" $ \o ->
         QiniuDualConfig
@@ -61,18 +68,28 @@ instance FromJSON QiniuDualConfig where
 
             nullToMaybe Nothing = Nothing
             nullToMaybe (Just x) = if null x then Nothing else Just x
+-- }}}1
 
 
 pubOfQiniuDualConfig :: QiniuDualConfig -> QiniuConfig
+-- {{{1
 pubOfQiniuDualConfig qc = QiniuConfig
                             (qcDualSecretKey qc)
                             (qcDualAccessKey qc)
                             (qcDualPublicBucket qc)
                             (qcDualPublicDomain qc)
+-- }}}1
+
 
 priOfQiniuDualConfig :: QiniuDualConfig -> QiniuConfig
+-- {{{1
 priOfQiniuDualConfig qc = QiniuConfig
                             (qcDualSecretKey qc)
                             (qcDualAccessKey qc)
                             (qcDualPrivateBucket qc)
                             (qcDualPrivateDomain qc)
+-- }}}1
+
+
+
+-- vim: set foldmethod=marker:

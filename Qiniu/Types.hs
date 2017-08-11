@@ -3,19 +3,20 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Qiniu.Types where
 
-import ClassyPrelude
+-- {{{1 imports
+import           ClassyPrelude
 import qualified Data.ByteString.Base64.URL as B64U
-import qualified Data.Aeson.TH              as AT
-import qualified Data.Text.Encoding         as TE
+import qualified Data.Aeson.TH as AT
+import qualified Data.Text.Encoding as TE
 #if defined(PERSISTENT)
-import Database.Persist                     (PersistField)
-import Database.Persist.Sql                 (PersistFieldSql)
+import           Database.Persist (PersistField)
+import           Database.Persist.Sql (PersistFieldSql)
 #endif
-
-import Data.Time.Clock.POSIX                (utcTimeToPOSIXSeconds)
-import Data.Aeson                           (FromJSON, ToJSON, toJSON, object, (.=))
-import Data.Time                            (NominalDiffTime, addUTCTime)
-import Network.URI                          (isUnreserved, escapeURIString)
+import           Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
+import           Data.Aeson (FromJSON, ToJSON, toJSON, object, (.=))
+import           Data.Time (NominalDiffTime, addUTCTime)
+import           Network.URI (isUnreserved, escapeURIString)
+-- }}}1
 
 
 #if defined(PERSISTENT)
@@ -41,12 +42,15 @@ data Scope = Scope Bucket (Maybe ResourceKey)
                 deriving (Eq, Ord)
 
 encodedScopeUri :: Scope -> ByteString
+-- {{{1
 encodedScopeUri (Scope bucket m_key) =
     B64U.encode $ fromString $ unBucket bucket ++
                     case m_key of
                         Just key -> ":" ++ unResourceKey key
                         Nothing -> ""
+-- }}}1
 
+-- {{{1 instances
 instance Show Scope where
     show (Scope bucket m_key) =
         case m_key of
@@ -55,6 +59,7 @@ instance Show Scope where
 
 instance ToJSON Scope where
     toJSON = toJSON . show
+-- }}}1
 
 
 type Entry = (Bucket, ResourceKey)
@@ -81,12 +86,14 @@ instance PersistFop SomePersistFop where
   encodeFopToText (SomePersistFop x) = encodeFopToText x
 
 encodeFopToText' :: PersistFop a => a -> Maybe Entry -> Text
+-- {{{1
 encodeFopToText' x m_save_entry =
   case m_save_entry of
     Nothing -> s
     Just entry -> s <> "|saveas/" <> decodeUtf8 (encodedEntryUri entry)
   where
     s = encodeFopToText x
+-- }}}1
 
 type FopCmd = (SomePersistFop, Maybe Entry)
 
@@ -94,15 +101,17 @@ encodeFopCmdList :: [FopCmd] -> Text
 encodeFopCmdList ops =
   mconcat $ intersperse ";" $ map (uncurry encodeFopToText') ops
 
-data PutPolicy = PutPolicy {
-                    ppScope             :: Scope
-                    , ppSaveKey         :: Maybe ResourceKey
-                    , ppDeadline        :: UTCTime
-                    , ppPersistentOps   :: [FopCmd]
-                    , ppPersistentNotifyUrl :: Maybe Text
-                    , ppPersistentPipeline  :: Maybe Pipeline
-                }
+data PutPolicy =
+       PutPolicy
+         { ppScope :: Scope
+         , ppSaveKey :: Maybe ResourceKey
+         , ppDeadline :: UTCTime
+         , ppPersistentOps :: [FopCmd]
+         , ppPersistentNotifyUrl :: Maybe Text
+         , ppPersistentPipeline :: Maybe Pipeline
+         }
 
+-- {{{1 instances
 instance ToJSON PutPolicy where
     toJSON pp =
         object $ catMaybes
@@ -115,17 +124,21 @@ instance ToJSON PutPolicy where
             , fmap (("persistentNotifyPipeline" .=) . unPipeline)
                     (ppPersistentPipeline pp)
             ]
+-- }}}1
 
 
-mkPutPolicy :: MonadIO m =>
-    Scope
-    -> Maybe ResourceKey    -- ^ the 'saveKey' field
-    -> NominalDiffTime
-    -> m PutPolicy
+mkPutPolicy :: MonadIO m
+            => Scope
+            -> Maybe ResourceKey    -- ^ the 'saveKey' field
+            -> NominalDiffTime
+            -> m PutPolicy
+-- {{{1
 mkPutPolicy scope save_key dt = liftIO $ do
-    now <- getCurrentTime
-    let t = addUTCTime dt now
-    return $ PutPolicy scope save_key t [] Nothing Nothing
+  now <- getCurrentTime
+  let t = addUTCTime dt now
+  return $ PutPolicy scope save_key t [] Nothing Nothing
+-- }}}1
+
 
 newtype SecretKey = SecretKey { unSecretKey :: ByteString }
                     deriving (Eq, Ord, Show)
@@ -165,6 +178,7 @@ logSource = "QiNiu"
 -- 这个函数的效果是让以下的恒等式成立。
 -- unEscapeString (keyToUrlPath (ResourceKey k)) == '/' : k
 keyToUrlPath :: ResourceKey -> String
+-- {{{1
 keyToUrlPath (ResourceKey key) = '/' : esc parts
     where
         parts = splitWhen (== '/') key
@@ -177,3 +191,8 @@ keyToUrlPath (ResourceKey key) = '/' : esc parts
                                     else escapeURIString isUnreserved x ++
                                             (if null t && xs /= [""] then "" else "/")
                          in s ++ t
+-- }}}1
+
+
+
+-- vim: set foldmethod=marker:

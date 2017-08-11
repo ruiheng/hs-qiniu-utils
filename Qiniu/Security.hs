@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Qiniu.Security where
 
+-- {{{1 imports
 import ClassyPrelude
 import qualified Crypto.Hash.SHA1           as SHA1
 import Crypto.MAC.HMAC                      (hmac)
@@ -19,6 +20,7 @@ import qualified Network.HTTP.Client        as HC
 
 import Qiniu.Types
 import Qiniu.HttpClient                     (replaceReqHttpHeader, requestBodyToBsBuilder)
+-- }}}1
 
 
 sign :: SecretKey -> ByteString -> ByteString
@@ -33,6 +35,7 @@ encodedSign' skey = C8.unpack . encodedSign skey
 newtype UploadToken = UploadToken { unUploadToken :: String }
 
 uploadToken :: SecretKey -> AccessKey -> PutPolicy -> UploadToken
+-- {{{1
 uploadToken skey akey pp =
     UploadToken $ concat
         [ C8.unpack $ unAccessKey akey
@@ -44,14 +47,16 @@ uploadToken skey akey pp =
     where
         encoded_pp = B64U.encode $ LB.toStrict $ A.encode pp
         encoded_sign = encodedSign' skey encoded_pp
+-- }}}1
 
 newtype DownloadToken = DownloadToken { unDownloadToken :: String }
 
-authedDownloadUrl ::
-    SecretKey -> AccessKey
-    -> UTCTime
-    -> String
-    -> String
+authedDownloadUrl :: SecretKey
+                  -> AccessKey
+                  -> UTCTime
+                  -> String
+                  -> String
+-- {{{1
 authedDownloadUrl skey akey expiry url =
     url2 ++ "&token=" ++ unDownloadToken token
     where
@@ -72,16 +77,17 @@ authedDownloadUrl skey akey expiry url =
                             , ":"
                             , encoded_sign
                             ]
+-- }}}1
 
 
 -- | 创建 Access Token 的算法
-mkAccessToken ::
-    SecretKey
-    -> AccessKey
-    -> ByteString       -- ^ url path
-    -> ByteString       -- ^ query string
-    -> LB.ByteString    -- ^ body bytestring
-    -> AccessToken
+mkAccessToken :: SecretKey
+              -> AccessKey
+              -> ByteString       -- ^ url path
+              -> ByteString       -- ^ query string
+              -> LB.ByteString    -- ^ body bytestring
+              -> AccessToken
+-- {{{1
 mkAccessToken secret_key access_key path qs body_bs =
     AccessToken $ mconcat
         [ unAccessKey access_key
@@ -101,14 +107,15 @@ mkAccessToken secret_key access_key path qs body_bs =
                         , BBU8.fromChar '\n'
                         , BB.fromLazyByteString body_bs
                         ]
+-- }}}1
 
 
 -- | 根据已知的 Http Request 计算 Access Token
-mkAccessTokenFromReq ::
-    SecretKey
-    -> AccessKey
-    -> Request
-    -> IO AccessToken
+mkAccessTokenFromReq :: SecretKey
+                     -> AccessKey
+                     -> Request
+                     -> IO AccessToken
+-- {{{1
 mkAccessTokenFromReq secret_key access_key req = do
     body_bs <- requestBodyToBsBuilder body
     return $ mkAccessToken
@@ -119,6 +126,7 @@ mkAccessTokenFromReq secret_key access_key req = do
         body    = HC.requestBody req
         path    = HC.path req
         qs      = HC.queryString req
+-- }}}1
 
 
 accessTokenHeader :: AccessToken -> Header
@@ -126,11 +134,16 @@ accessTokenHeader at = (hAuthorization, "QBox " <> unAccessToken at)
 
 
 -- | 在 Http Request 里加入 Access Token 相关的头部信息
-applyAccessTokenForReq ::
-    SecretKey
-    -> AccessKey
-    -> Request
-    -> IO Request
+applyAccessTokenForReq :: SecretKey
+                       -> AccessKey
+                       -> Request
+                       -> IO Request
+-- {{{1
 applyAccessTokenForReq secret_key access_key req = do
-    token <- mkAccessTokenFromReq secret_key access_key req
-    return $ replaceReqHttpHeader (accessTokenHeader token) req
+  token <- mkAccessTokenFromReq secret_key access_key req
+  return $ replaceReqHttpHeader (accessTokenHeader token) req
+-- }}}1
+
+
+
+-- vim: set foldmethod=marker:
