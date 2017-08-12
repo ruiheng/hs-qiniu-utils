@@ -46,6 +46,7 @@ library
                        Qiniu.URL
                        Qiniu.Error
                        Qiniu.Config
+                       Qiniu.WebPlayer
                        Qiniu
   other-modules:       Qiniu.HttpClient
                        Qiniu.Utils

@@ -10,6 +10,7 @@ module Qiniu
     , module Qiniu.Error
     , module Qiniu.Config
     , module Qiniu.Utils
+    , module Qiniu.WebPlayer
     ) where
 
 import Qiniu.Types
@@ -23,3 +24,4 @@ import Qiniu.URL
 import Qiniu.Error
 import Qiniu.Config
 import Qiniu.Utils
+import Qiniu.WebPlayer
