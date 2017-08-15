@@ -27,6 +27,10 @@ Flag persistent
     Description:   Build with persistent library support
     Default:       True
 
+Flag yesod
+    Description:   Build with yesod library support
+    Default:       True
+
 Flag dev
     Description:   Turn on development settings, like disable optimization.
     Default:       True
@@ -93,13 +97,17 @@ library
   else
     build-depends: network-uri < 2.6, network < 2.6
 
-  -- hs-source-dirs:      
-  default-language:    Haskell2010
-  ghc-options:         -Wall
-
   if flag(persistent)
       cpp-options:   -DPERSISTENT
       build-depends: persistent
+
+  if flag(yesod)
+      cpp-options:   -DYESOD
+      build-depends: yesod-core
+
+  -- hs-source-dirs:      
+  default-language:    Haskell2010
+  ghc-options:         -Wall
 
 
   if flag(dev)
