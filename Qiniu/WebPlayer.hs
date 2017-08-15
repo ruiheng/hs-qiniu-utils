@@ -1,9 +1,12 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Qiniu.WebPlayer where
 
 -- {{{1 imports
 import           ClassyPrelude
+import           Data.Default (Default)
 import qualified Data.Aeson.TH as AT
 
 #if defined(YESOD)
@@ -56,22 +59,22 @@ $(AT.deriveJSON
 data WebPlayerOptions =
      -- CAUTION: 注意字段名为了让 TH 生成的 ToJSON 与文档相符，所以注意不能随便改名
        WebPlayerOptions
-         { wpOptsEngineOrder :: [WebPlayerEngine]
-         , wpOptsAutoplay    :: Bool
-         , wpOptsPreload     :: WebPlayerPreload
-         , wpOptsControls    :: Bool
-         , wpOptsPoster      :: String
-         , wpOptsWidth       :: Int
-         , wpOptsHeight      :: Int
-         , wpOptsUrl         :: String
-         , wpOptsType        :: WebPlayerVideoType
-         , wpOptsLoop        :: Bool
-         , wpOptsStretching  :: WebPlayerStretch
+         { wpOptsEngineOrder :: Maybe [WebPlayerEngine]
+         , wpOptsAutoplay    :: Maybe Bool
+         , wpOptsPreload     :: Maybe WebPlayerPreload
+         , wpOptsControls    :: Maybe Bool
+         , wpOptsPoster      :: Maybe String
+         , wpOptsWidth       :: Maybe Int
+         , wpOptsHeight      :: Maybe Int
+         , wpOptsUrl         :: Maybe String
+         , wpOptsType        :: Maybe WebPlayerVideoType
+         , wpOptsLoop        :: Maybe Bool
+         , wpOptsStretching  :: Maybe WebPlayerStretch
          }
-         deriving (Show)
+         deriving (Show, Generic, Default)
 
 $(AT.deriveJSON
-    AT.defaultOptions {AT.fieldLabelModifier = lowerFirst . drop 5}
+    AT.defaultOptions {AT.omitNothingFields = True, AT.fieldLabelModifier = lowerFirst . drop 5}
     ''WebPlayerOptions)
 
 
