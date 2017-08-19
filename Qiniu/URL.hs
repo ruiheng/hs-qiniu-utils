@@ -106,5 +106,24 @@ authedResourceDownloadUrl' skey akey expiry m_domain bucket rkey m_qs =
     authedDownloadUrl skey akey expiry $ resourceDownloadUrl' m_domain bucket rkey m_qs
 
 
+authedResourceDownloadUrlByConfig :: IsString s
+                                  => QiniuConfig
+                                  -> UTCTime
+                                  -> ResourceKey
+                                  -> Maybe String
+                                  -> s
+-- {{{1
+authedResourceDownloadUrlByConfig qc expiry rkey m_qs =
+  authedResourceDownloadUrl' skey akey expiry m_domain bucket rkey' m_qs
+  where
+    skey = qiniuConfigSecretKey qc
+    akey = qiniuConfigAccessKey qc
+    bucket = qiniuConfigBucket qc
+    m_domain = qiniuConfigDomain qc
+    rkey' = case qiniuConfigPathPrefix qc of
+              p | not (null p) -> ResourceKey $ p </> unResourceKey rkey
+                | otherwise -> rkey
+-- }}}1
+
 
 -- vim: set foldmethod=marker:
