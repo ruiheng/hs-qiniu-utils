@@ -93,7 +93,7 @@ webPlayJsUrl = "https://player.qiniucc.com/sdk/latest/qiniuplayer.min.js"
 webPlayWidget :: (MonadWidget m) => Text -> WebPlayerOptions -> m ()
 -- {{{1
 webPlayWidget element_id opts = do
-  -- addStylesheetRemote webPlayCssUrl
+  addStylesheetRemote webPlayCssUrl
   addScriptRemote webPlayJsUrl
 
   toWidget $ 
