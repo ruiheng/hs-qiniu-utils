@@ -74,7 +74,7 @@ data WebPlayerOptions =
          deriving (Show, Generic, Default)
 
 $(AT.deriveJSON
-    AT.defaultOptions {AT.omitNothingFields = True, AT.fieldLabelModifier = lowerFirst . drop 5}
+    AT.defaultOptions {AT.omitNothingFields = True, AT.fieldLabelModifier = lowerFirst . drop 6}
     ''WebPlayerOptions)
 
 
