@@ -10,23 +10,25 @@ import Qiniu.Config
 
 
 resourceDownloadUrl :: IsString s
-                    => Maybe String        -- ^ domain
+                    => Bool
+                    -> Maybe String        -- ^ domain
                     -> Bucket
                     -> ResourceKey
                     -> s
-resourceDownloadUrl m_domain bucket rkey = resourceDownloadUrl' m_domain bucket rkey Nothing
+resourceDownloadUrl if_ssl m_domain bucket rkey = resourceDownloadUrl' if_ssl m_domain bucket rkey Nothing
 
 
 resourceDownloadUrl' :: IsString s
-                     => Maybe String        -- ^ domain
+                     => Bool
+                     -> Maybe String        -- ^ domain
                      -> Bucket
                      -> ResourceKey
                      -> Maybe String     -- ^ optional query string
                      -> s
 -- {{{1
-resourceDownloadUrl' m_domain bucket rkey m_qs = fromString $
+resourceDownloadUrl' if_ssl m_domain bucket rkey m_qs = fromString $
   concat
-    [ "http://"
+    [ if if_ssl then "https://" else "http://"
     , fromMaybe (unBucket bucket ++ ".qiniudn.com") m_domain
     , keyToUrlPath rkey
     , case m_qs of
@@ -43,7 +45,7 @@ resourceDownloadUrlByConfig :: IsString s
                             -> s
 -- {{{1
 resourceDownloadUrlByConfig qc rkey =
-  resourceDownloadUrl m_domain bucket rkey
+  resourceDownloadUrl (qiniuConfigSslUrl qc) m_domain bucket rkey
   where
     m_domain = qiniuConfigDomain qc
     bucket = qiniuConfigBucket qc
@@ -57,7 +59,7 @@ resourceDownloadUrlByConfig' :: IsString s
                              -> s
 -- {{{1
 resourceDownloadUrlByConfig' qc rkey m_qs =
-  resourceDownloadUrl' m_domain bucket rkey m_qs
+  resourceDownloadUrl' (qiniuConfigSslUrl qc) m_domain bucket rkey m_qs
   where
     m_domain = qiniuConfigDomain qc
     bucket = qiniuConfigBucket qc
@@ -84,26 +86,28 @@ authedResourceDownloadUrl :: IsString s
                           => SecretKey
                           -> AccessKey
                           -> UTCTime
+                          -> Bool
                           -> Maybe String        -- ^ domain
                           -> Bucket
                           -> ResourceKey
                           -> s
-authedResourceDownloadUrl skey akey expiry m_domain bucket rkey =
-  authedResourceDownloadUrl' skey akey expiry m_domain bucket rkey Nothing
+authedResourceDownloadUrl skey akey expiry if_ssl m_domain bucket rkey =
+  authedResourceDownloadUrl' skey akey expiry if_ssl m_domain bucket rkey Nothing
 
 
 authedResourceDownloadUrl' :: IsString s
                            => SecretKey
                            -> AccessKey
                            -> UTCTime
+                           -> Bool
                            -> Maybe String        -- ^ domain
                            -> Bucket
                            -> ResourceKey
                            -> Maybe String     -- ^ optional query string
                            -> s
-authedResourceDownloadUrl' skey akey expiry m_domain bucket rkey m_qs =
+authedResourceDownloadUrl' skey akey expiry if_ssl m_domain bucket rkey m_qs =
   fromString $
-    authedDownloadUrl skey akey expiry $ resourceDownloadUrl' m_domain bucket rkey m_qs
+    authedDownloadUrl skey akey expiry $ resourceDownloadUrl' if_ssl m_domain bucket rkey m_qs
 
 
 authedResourceDownloadUrlByConfig :: IsString s
@@ -114,11 +118,12 @@ authedResourceDownloadUrlByConfig :: IsString s
                                   -> s
 -- {{{1
 authedResourceDownloadUrlByConfig qc expiry rkey m_qs =
-  authedResourceDownloadUrl' skey akey expiry m_domain bucket rkey' m_qs
+  authedResourceDownloadUrl' skey akey expiry if_ssl m_domain bucket rkey' m_qs
   where
     skey = qiniuConfigSecretKey qc
     akey = qiniuConfigAccessKey qc
     bucket = qiniuConfigBucket qc
+    if_ssl = qiniuConfigSslUrl qc
     m_domain = qiniuConfigDomain qc
     rkey' = case qiniuConfigPathPrefix qc of
               p | not (null p) -> ResourceKey $ p </> unResourceKey rkey
