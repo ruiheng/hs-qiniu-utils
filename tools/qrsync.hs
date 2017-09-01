@@ -42,6 +42,7 @@ import Qiniu.WS.Types
 import Qiniu.Security
 import Qiniu.ByteString
 import Qiniu.Upload
+import Qiniu.Region
 
 data RsyncOptions = RsyncOptions {
                 roSecretKey         :: SecretKey
@@ -53,6 +54,7 @@ data RsyncOptions = RsyncOptions {
                 , roVerbose         :: Int
                 , roThreadNum       :: Int
                 , roContinueMode    :: Bool
+                , roRegion          :: Region
                 }
                 deriving (Show)
 
@@ -126,6 +128,12 @@ parseOptions = RsyncOptions <$>
                         <> help "Thread number (default 1)")
                 <*> (switch $ long "coninue" <> short 'c'
                             <> help "Coninue/Recover mode.")
+                <*> (option auto
+                      $ long "region" <> short 'R'
+                      <> metavar "REGION"
+                      <> value EastChina
+                      <> help ("Bucket Region. Default is EastChina." <> concat (map show [EastChina .. NorthAmerica]))
+                    )
 
 parseFileNames :: Parser [FilePath]
 parseFileNames = fmap ordNub $ some $ argument str $ metavar "FILES..."
@@ -138,12 +146,13 @@ uploadOneFile sess fp = do
         akey    = roAccessKey ro
         bucket  = roBucket ro
         save_key = roResourceSaveKey ro
+        region  = roRegion ro
     pp0 <- mkPutPolicy (Scope bucket Nothing) save_key (fromIntegral (3600*24 :: Int))
     let pp = pp0
     let upload_token = uploadToken skey akey pp
     let rkey = Nothing
     ws_result <- (liftIO $ LB.readFile fp)
-                    >>= flip runReaderT (sess, upload_token) . (uploadOneShot rkey Nothing fp)
+                    >>= flip runReaderT (sess, region, upload_token) . (uploadOneShot rkey Nothing fp)
     liftIO $ do
         case ws_result of
             Left http_err -> do
@@ -183,6 +192,7 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
         save_key = roResourceSaveKey ro
         thread_num = roThreadNum ro
         cr_mode     = roContinueMode ro
+        region  = roRegion ro
     pp0 <- mkPutPolicy (Scope bucket Nothing) save_key (fromIntegral (3600*24 :: Int))
     let pp = pp0
     let upload_token = uploadToken skey akey pp
@@ -232,7 +242,7 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
                                                             thread_num
                                                             last_rui
                                                             bs)
-                                                        (sess, upload_token)
+                                                        (sess, region, upload_token)
 
                             writeChan done_ch Nothing >> wait watcher >> return ()
                             return ws_result

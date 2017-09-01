@@ -5,6 +5,7 @@ module Qiniu.Config where
 import ClassyPrelude
 import Data.Aeson
 
+import Qiniu.Region
 import Qiniu.Types
 -- }}}1
 
@@ -54,6 +55,7 @@ data QiniuDualConfig =
          , qcDualPrivateDomain :: Maybe String
          , qcDualPrivateSslUrl :: Bool
          , qcDualPathPrefix    :: String
+         , qcDualRegion        :: Region
          }
   deriving (Eq, Show)
 
@@ -74,6 +76,7 @@ instance FromJSON QiniuDualConfig where
             <*> ( fmap nullToMaybe $ o .:? "private-domain" )
             <*> ( o .:? "private-ssl-url" .!= False )
             <*> ( fmap (fromMaybe "") $ o .:? "path-prefix" )
+            <*> ( fmap (fromMaybe EastChina) $ o .:? "region" )
         where
             check_non_empty_str s = if null s then mzero else return s
 

@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                qiniu-utils
-version:             0.6.0.0
+version:             0.7.0.0
 -- synopsis:            
 -- description:         
 license:             BSD3
@@ -52,6 +52,7 @@ library
                        Qiniu.Config
                        Qiniu.WebPlayer
                        Qiniu
+                       Qiniu.Region
   other-modules:       Qiniu.HttpClient
                        Qiniu.Utils
 
