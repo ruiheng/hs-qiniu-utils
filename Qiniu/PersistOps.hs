@@ -65,18 +65,31 @@ type QiniuPfopMonad m = (MonadIO m, MonadCatch m, MonadLogger m, MonadReader Man
 type AvthumbFormat = Text
 
 -- | 音视频处理
-data AvthumbSubOp = AvthumbOpBitRate Int        -- ^ /ab/<BitRate>
+data AvthumbSubOp = AvthumbOpBitRate Int        -- ^ /ab/<BitRate>k
                   | AvthumbOpAudioQuality Int   -- ^ /aq/<AudioQuality>
                   | AvthumbOpSamplingRate Int   -- ^ 采样频率，单位HZ
                   | AvthumbOpAudioCodec Text    -- ^ 编码方案．如 libx264
+                  | AvthumbOpFrameRate Int      -- ^ 视频帧率
+                  | AvthumbOpVideoBitRate Int   -- ^ 视频码率 kHz
+                  | AvthumbOpVideoCodec Text    -- ^ 视频编码格式
+                  | AvthumbOpVideoResolution (Either (Int, Int) Text)  -- ^ 视频分辨率
+                  | AvthumbOpVideoAutoscale Bool -- ^ 视频是否按原比例缩放
+                  | AvthumbOpStripMeta Bool     -- ^ 是否去除 meta 信息
   deriving (Show, Eq, Ord)
 
 encodeAvthumbOpAsPath :: AvthumbSubOp -> Text
 -- {{{1
-encodeAvthumbOpAsPath (AvthumbOpBitRate k) = "ab/" <> tshow k <> "k"
-encodeAvthumbOpAsPath (AvthumbOpAudioQuality q) = "aq/" <> tshow q
-encodeAvthumbOpAsPath (AvthumbOpSamplingRate r) = "ar/" <> tshow r
-encodeAvthumbOpAsPath (AvthumbOpAudioCodec c) = "acodec/" <> c
+encodeAvthumbOpAsPath (AvthumbOpBitRate k)                    = "ab/" <> tshow k <> "k"
+encodeAvthumbOpAsPath (AvthumbOpAudioQuality q)               = "aq/" <> tshow q
+encodeAvthumbOpAsPath (AvthumbOpSamplingRate r)               = "ar/" <> tshow r
+encodeAvthumbOpAsPath (AvthumbOpAudioCodec c)                 = "acodec/" <> c
+encodeAvthumbOpAsPath (AvthumbOpFrameRate r)                  = "r/" <> tshow r
+encodeAvthumbOpAsPath (AvthumbOpVideoBitRate r)               = "vb/" <> tshow r <> "k"
+encodeAvthumbOpAsPath (AvthumbOpVideoCodec t)                 = "vcodec/" <> t
+encodeAvthumbOpAsPath (AvthumbOpVideoResolution (Left (x,y))) = "s/" <> tshow x <> "x" <> tshow y
+encodeAvthumbOpAsPath (AvthumbOpVideoResolution (Right n))    = "s/" <> n
+encodeAvthumbOpAsPath (AvthumbOpVideoAutoscale b)             = "autoscale/" <> if b then "1" else "0"
+encodeAvthumbOpAsPath (AvthumbOpStripMeta b)                  = "stripmeta/" <> if b then "1" else "0"
 -- }}}1
 
 
