@@ -121,7 +121,7 @@ instance ToJSON PutPolicy where
                                         :: Int64)
             , Just $ "persistentOps" .= encodeFopCmdList (ppPersistentOps pp)
             , fmap ("persistentNotifyUrl" .=) (ppPersistentNotifyUrl pp)
-            , fmap (("persistentNotifyPipeline" .=) . unPipeline)
+            , fmap (("persistentPipeline" .=) . unPipeline)
                     (ppPersistentPipeline pp)
             ]
 -- }}}1
