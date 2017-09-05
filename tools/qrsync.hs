@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+-- {{{1 imports
 import ClassyPrelude hiding (catch
 #if !MIN_VERSION_optparse_applicative(0, 13, 0)
                             , (<>)
@@ -43,6 +44,7 @@ import Qiniu.Security
 import Qiniu.ByteString
 import Qiniu.Upload
 import Qiniu.Region
+-- }}}1
 
 data RsyncOptions = RsyncOptions {
                 roSecretKey         :: SecretKey
@@ -59,6 +61,7 @@ data RsyncOptions = RsyncOptions {
                 deriving (Show)
 
 appLogger :: LoggerSet -> Int -> Loc -> LogSource -> LogLevel -> LogStr -> IO ()
+-- {{{1
 appLogger logger_set verbose loc src level ls = do
     let should_log = case level of
                         LevelOther {}   -> True
@@ -73,6 +76,7 @@ appLogger logger_set verbose loc src level ls = do
             | lv == 1   = [ LevelError, LevelWarn ]
             | lv == 2   = [ LevelError, LevelWarn, LevelInfo ]
             | otherwise = [ LevelError, LevelWarn, LevelInfo, LevelDebug ]
+-- }}}1
 
 byteSizeReader ::
 #if MIN_VERSION_optparse_applicative(0, 11, 0)
@@ -83,6 +87,7 @@ byteSizeReader = do
     (Monad m, Num a, Eq a) => String -> m a
 byteSizeReader s = do
 #endif
+-- {{{1
     maybe (fail "not a valid byte length") (return . (\(x,y) -> x * fromIntegral y)) $
         listToMaybe $
             catMaybes $
@@ -96,8 +101,10 @@ byteSizeReader s = do
             |x == "m" || x == "M"   = Just $ 1024 * 1024
             |x == "g" || x == "G"   = Just $ 1024 * 1024 * 1024
             | otherwise             = Nothing
+-- }}}1
 
 parseOptions :: Parser RsyncOptions
+-- {{{1
 parseOptions = RsyncOptions <$>
                 (fmap (SecretKey . fromString) $
                     strOption $ long "skey" <> short 's' <> help "Secret Key")
@@ -134,12 +141,16 @@ parseOptions = RsyncOptions <$>
                       <> value EastChina
                       <> help ("Bucket Region. Default is EastChina." <> concat (map show [EastChina .. NorthAmerica]))
                     )
+-- }}}1
 
 parseFileNames :: Parser [FilePath]
 parseFileNames = fmap ordNub $ some $ argument str $ metavar "FILES..."
 
-uploadOneFile :: (MonadIO m, MonadThrow m, MonadLogger m) =>
-    WS.Session ->FilePath -> ReaderT RsyncOptions m ()
+uploadOneFile :: (MonadIO m, MonadThrow m, MonadLogger m)
+              => WS.Session
+              -> FilePath
+              -> ReaderT RsyncOptions m ()
+-- {{{1
 uploadOneFile sess fp = do
     ro <- ask
     let skey    = roSecretKey ro
@@ -163,17 +174,20 @@ uploadOneFile sess fp = do
                 let scope = Scope bucket (Just rrkey)
                 putStrLn $ fromString $ "File '" <> fp <> "' uploaded to " <> show scope
                 putStrLn $ fromString $ "ETag: " <> etag
+-- }}}1
 
 
-lookupStateFile :: (MonadIO m) =>
-    ByteString  -- ^ etag
-    -> m (FilePath, Maybe RecoverUploadInfo)
+lookupStateFile :: (MonadIO m)
+                => ByteString  -- ^ etag
+                -> m (FilePath, Maybe RecoverUploadInfo)
+-- {{{1
 lookupStateFile etag = liftIO $ do
     let state_fp = ".up_state." ++ C8.unpack etag ++ ".yml"
     err_or_rui <- Y.decodeFileEither state_fp
     case err_or_rui of
         Left _ -> return (state_fp, Nothing)
         Right x -> return (state_fp, Just x)
+-- }}}1
 
 removeIfExists :: FilePath -> IO ()
 removeIfExists fileName = removeFile fileName `catch` handleExists
@@ -181,9 +195,9 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
           | isDoesNotExistError e = return ()
           | otherwise = throwM e
 
-uploadOneFileByBlock :: forall m.
-    (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m) =>
-    WS.Session -> Int64 -> Int64 -> Maybe ByteString -> FilePath -> ReaderT RsyncOptions m ()
+uploadOneFileByBlock :: forall m.  (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m)
+                     => WS.Session -> Int64 -> Int64 -> Maybe ByteString -> FilePath -> ReaderT RsyncOptions m ()
+-- {{{1
 uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
     ro <- ask
     let skey    = roSecretKey ro
@@ -265,9 +279,12 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
                 when (r_etag /= C8.unpack etag) $ do
                     T.hPutStrLn stderr $ "etag mismatch"
                     exitFailure
+-- }}}1
 
-start :: (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m) =>
-    WS.Session ->[FilePath] -> ReaderT RsyncOptions m ()
+
+start :: (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m)
+      => WS.Session ->[FilePath] -> ReaderT RsyncOptions m ()
+-- {{{1
 start sess fps = do
     ro <- ask
     case (roBlockSize ro, roChunkSize ro) of
@@ -275,18 +292,26 @@ start sess fps = do
             mapM_ (uploadOneFileByBlock sess block_size chunk_size Nothing) fps
 
         _ -> mapM_ (uploadOneFile sess) fps
+-- }}}1
 
 start' :: RsyncOptions -> [FilePath] -> IO ()
+-- {{{1
 start' ro fps = WS.withAPISession $ \sess -> do
     logger_set <- newStderrLoggerSet 0
     runLoggingT
         (runReaderT (start sess fps) ro)
         (appLogger logger_set (roVerbose ro))
+-- }}}1
 
 main :: IO ()
+-- {{{1
 main = execParser opts >>= uncurry start'
     where
         opts = info (helper <*> ((,) <$> parseOptions <*> parseFileNames))
                 (fullDesc
                     <> progDesc "Sync files to QiNiu"
                     <> header "qrsync - remote sync for QiNiu")
+-- }}}1
+
+
+-- vim: set foldmethod=marker:
