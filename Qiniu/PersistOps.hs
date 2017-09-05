@@ -76,7 +76,7 @@ encodeAvthumbOpAsPath :: AvthumbSubOp -> Text
 encodeAvthumbOpAsPath (AvthumbOpBitRate k) = "ab/" <> tshow k <> "k"
 encodeAvthumbOpAsPath (AvthumbOpAudioQuality q) = "aq/" <> tshow q
 encodeAvthumbOpAsPath (AvthumbOpSamplingRate r) = "ar/" <> tshow r
-encodeAvthumbOpAsPath (AvthumbOpAudioCodec c) = "ar/" <> c
+encodeAvthumbOpAsPath (AvthumbOpAudioCodec c) = "acodec/" <> c
 -- }}}1
 
 
