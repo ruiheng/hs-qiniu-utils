@@ -68,10 +68,10 @@ type AvthumbFormat = Text
 data AvthumbSubOp = AvthumbOpAudioBitRate Int        -- ^ /ab/<BitRate>k
                   | AvthumbOpAudioQuality Int   -- ^ /aq/<AudioQuality>
                   | AvthumbOpSamplingRate Int   -- ^ 采样频率，单位HZ
-                  | AvthumbOpAudioCodec Text    -- ^ 编码方案．如 libx264
                   | AvthumbOpFrameRate Int      -- ^ 视频帧率
                   | AvthumbOpVideoBitRate Int   -- ^ 视频码率 kHz
                   | AvthumbOpVideoCodec Text    -- ^ 视频编码格式
+                  | AvthumbOpAudioCodec Text    -- ^ 编码方案．如 libx264
                   | AvthumbOpVideoResolution (Either (Int, Int) Text)  -- ^ 视频分辨率
                   | AvthumbOpVideoAutoscale Bool -- ^ 视频是否按原比例缩放
                   | AvthumbOpStripMeta Bool     -- ^ 是否去除 meta 信息
@@ -98,7 +98,7 @@ data AvthumbOp = AvthumbOp AvthumbFormat [AvthumbSubOp]
 
 instance PersistFop AvthumbOp where
   encodeFopToText (AvthumbOp format sub_ops) =
-    mconcat $ intersperse "/" $ ("avthumb/" <> format) : map encodeAvthumbOpAsPath sub_ops
+    mconcat $ intersperse "/" $ ("avthumb/" <> format) : map encodeAvthumbOpAsPath (sort sub_ops)
 
 data PfopResp = PfopResp { unPfopResp :: PersistentId }
 
