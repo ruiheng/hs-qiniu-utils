@@ -72,9 +72,11 @@ data AvthumbSubOp = AvthumbOpAudioBitRate Int        -- ^ /ab/<BitRate>k
                   | AvthumbOpVideoBitRate Int   -- ^ 视频码率 kHz
                   | AvthumbOpVideoCodec Text    -- ^ 视频编码格式
                   | AvthumbOpAudioCodec Text    -- ^ 编码方案．如 libx264
+                  | AvthumbOpSubtitleCodec Text -- ^ 字幕编码方案
                   | AvthumbOpVideoResolution (Either (Int, Int) Text)  -- ^ 视频分辨率
                   | AvthumbOpVideoAutoscale Bool -- ^ 视频是否按原比例缩放
                   | AvthumbOpStripMeta Bool     -- ^ 是否去除 meta 信息
+                  | AvthumbOpNoSubtitle Bool    -- ^ 是否去除字幕
   deriving (Show, Eq, Ord)
 
 encodeAvthumbOpAsPath :: AvthumbSubOp -> Text
@@ -86,10 +88,12 @@ encodeAvthumbOpAsPath (AvthumbOpAudioCodec c)                 = "acodec/" <> c
 encodeAvthumbOpAsPath (AvthumbOpFrameRate r)                  = "r/" <> tshow r
 encodeAvthumbOpAsPath (AvthumbOpVideoBitRate r)               = "vb/" <> tshow r <> "k"
 encodeAvthumbOpAsPath (AvthumbOpVideoCodec t)                 = "vcodec/" <> t
+encodeAvthumbOpAsPath (AvthumbOpSubtitleCodec t)              = "scodec/" <> t
 encodeAvthumbOpAsPath (AvthumbOpVideoResolution (Left (x,y))) = "s/" <> tshow x <> "x" <> tshow y
 encodeAvthumbOpAsPath (AvthumbOpVideoResolution (Right n))    = "s/" <> n
 encodeAvthumbOpAsPath (AvthumbOpVideoAutoscale b)             = "autoscale/" <> if b then "1" else "0"
 encodeAvthumbOpAsPath (AvthumbOpStripMeta b)                  = "stripmeta/" <> if b then "1" else "0"
+encodeAvthumbOpAsPath (AvthumbOpNoSubtitle b)                 = "sn/" <> if b then "1" else "0"
 -- }}}1
 
 
