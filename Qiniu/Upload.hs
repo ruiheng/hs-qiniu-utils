@@ -193,7 +193,7 @@ uploadMkfile file_size m_key m_mime host ctx_list = runExceptT $ do
                                 . UTF8.fromString
                                   . unResourceKey
                             <$> m_key) ++
-            (fromMaybe "" $ flip fmap m_mime $ ("/mimeType" ++) . C8.unpack . B64U.encode)
+            (fromMaybe "" $ flip fmap m_mime $ ("/mimeType/" ++) . C8.unpack . B64U.encode)
 
   -- $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
   rb <- ExceptT $ liftIO $ try $ WS.postWith opts sess url $
