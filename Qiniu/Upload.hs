@@ -403,7 +403,7 @@ onDoneWriteChan :: (MonadIO m, MonadLogger m)
                 -> UploadOpDoneReporter m
 -- {{{1
 onDoneWriteChan done_ch block_offset cpr = do
-  $(logInfoS) logSource $ fromString $
+  $(logDebugS) logSource $ fromString $
     "block offset " ++ show block_offset
                        ++ " chunk offset " ++ show (cprOffset cpr)
                                               ++ " done."
