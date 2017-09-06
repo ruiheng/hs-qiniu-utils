@@ -18,11 +18,19 @@ import Network.HTTP.Client                  (HttpExceptionContent(..), responseS
 import Network.HTTP.Types                   (statusCode)
 
 import Network.Wreq hiding (statusCode)
+import qualified Network.Wreq as Wreq
 import Control.Lens
 -- }}}1
 
 
 type WsRespBodyNormal = Map String Value
+
+-- | 现在发现错误代码可能不会在json结构里出现
+-- 但又不知道是否所有接口都这样
+-- 所以做了这样一个hack: json结构里没有错误代码的，先使用某个不可能的值占位
+-- 然后再从http状态里取状态码
+wsErrorCodePlaceHolder :: Int
+wsErrorCodePlaceHolder = -1
 
 data WsError =
        WsError
@@ -37,8 +45,8 @@ instance Exception WsError
 
 instance FromJSON WsError where
     parseJSON = withObject "WsError" $ \obj -> do
-                    WsError <$> (obj .: "code")
-                            <*> (obj .: "error")
+      WsError <$> (obj A..:? "code" A..!= wsErrorCodePlaceHolder)
+              <*> (obj .: "error")
 -- }}}1
 
 
@@ -73,10 +81,15 @@ asWsResponseNormal :: (MonadThrow m)
                    -> m (Either WsError (Response WsRespBodyNormal))
 -- {{{1
 asWsResponseNormal rb = do
-    r <- liftM (over responseBody unWsRespBody) $ asWsResponse rb
-    return $ case r ^. responseBody of
-        Left err -> Left err
-        Right nb -> Right $ r & responseBody .~ nb
+  r <- liftM (over responseBody unWsRespBody) $ asWsResponse rb
+  case r ^. responseBody of
+    Left err -> do err' <- if __wsHttpCode err /= wsErrorCodePlaceHolder
+                              then return err
+                              else do let status_code = statusCode $ r ^. Wreq.responseStatus
+                                      return $ err { __wsHttpCode = status_code }
+                   return $ Left err'
+
+    Right nb -> return $ Right $ r & responseBody .~ nb
 -- }}}1
 
 asWsResponseNormal' :: (MonadThrow m, FromJSON a)
