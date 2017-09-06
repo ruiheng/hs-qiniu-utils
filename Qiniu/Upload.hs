@@ -112,7 +112,7 @@ uploadMkblk block_size bs = runExceptT $ do
              & header "Authorization" .~
              [fromString $ "UpToken " ++ unUploadToken upload_token]
       host = getHost region ServerUpload False
-      url = host ++ "mkblk/" ++ show block_size
+      url = host ++ "/mkblk/" ++ show block_size
   $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
   rb <- ExceptT $ liftIO $ try $ WS.postWith opts sess url bs
   runExceptT $ do
