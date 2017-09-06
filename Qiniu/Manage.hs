@@ -1,11 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Qiniu.Manage where
 
 -- {{{1 imports
 import           ClassyPrelude hiding (try)
+import qualified Control.Exception.Lifted as Lifted
+import           Control.Lens (view)
 import           Control.Monad.Logger
 import qualified Data.Aeson.TH as AT
 import qualified Data.ByteString.Base64.URL as B64U
@@ -15,6 +18,7 @@ import           Control.Monad.Trans.Except (runExceptT, ExceptT(..))
 import           Control.Monad.Catch (try)
 import           Network.HTTP.Client (httpLbs, Request, Manager, host, path, urlEncodedBody,
                                       setQueryString, defaultRequest)
+import           Network.Wreq (responseBody)
 import           Data.Conduit (Source, yield)
 
 import           Qiniu.Utils (lowerFirst, ServerTimeStamp(..))
@@ -52,7 +56,7 @@ data EntryStat =
 
 $(AT.deriveJSON AT.defaultOptions { AT.fieldLabelModifier = lowerFirst . drop 5 } ''EntryStat)
 
-stat :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+stat :: (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
      => SecretKey
      -> AccessKey
      -> Entry -> m (WsResult EntryStat)
@@ -60,7 +64,9 @@ stat :: (MonadIO m, MonadReader Manager m, MonadCatch m)
 stat secret_key access_key entry = runExceptT $ do
   mgmt <- ask
   req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
-  asWsResponseNormal' =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+  resp <- ExceptT $ try $ liftIO $ httpLbs req' mgmt
+  asWsResponseNormal' resp `Lifted.onException`
+    ($logErrorS logSource $ "Cannot parse response body: " <> toStrict (decodeUtf8 (view responseBody resp)))
   where
     url_path = "/stat/" <> encodedEntryUri entry
     req = manageApiReqGet url_path
@@ -68,7 +74,7 @@ stat secret_key access_key entry = runExceptT $ do
 
 
 -- | Test whether an entry already exists and with the same etag
-alreadyExistsAndMatch :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+alreadyExistsAndMatch :: (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
                       => SecretKey
                       -> AccessKey
                       -> Entry
@@ -92,7 +98,7 @@ alreadyExistsAndMatch secret_key access_key entry get_local_etag = do
 -- }}}1
 
 -- | Like alreadyExistsAndMatch, but consider any error as 'does not exist'
-alreadyExistsAndMatch' :: (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m)
+alreadyExistsAndMatch' :: (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadLogger m, MonadBaseControl IO m)
                        => SecretKey
                        -> AccessKey
                        -> Entry
@@ -104,7 +110,7 @@ alreadyExistsAndMatch' secret_key access_key entry get_local_etag = do
   case err_or_exists of
     Right x -> return x
     Left err -> do
-      $logError $ "alreadyExistsAndMatch failed: " <> tshow err
+      $logErrorS logSource $ "alreadyExistsAndMatch failed: " <> tshow err
       return False
 -- }}}1
 

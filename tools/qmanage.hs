@@ -179,7 +179,7 @@ printResult f ws_result = do
 
 
 processCmd ::
-    (MonadIO m, MonadReader Manager m, MonadCatch m) =>
+    (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
     SecretKey -> AccessKey -> Command -> m ()
 processCmd secret_key access_key (Stat entry) = do
     (stat secret_key access_key entry) >>= printResult f
@@ -204,7 +204,7 @@ processCmd secret_key access_key (Fetch url scope) = do
 
 
 interactive ::
-    (MonadIO m, MonadReader Manager m, MonadCatch m) =>
+    (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
     SecretKey -> AccessKey -> m ()
 interactive secret_key access_key = do
     liftIO $ hSetBuffering stdout NoBuffering
@@ -234,7 +234,7 @@ interactive secret_key access_key = do
 
 
 start ::
-    (MonadIO m, MonadReader Manager m, MonadCatch m) =>
+    (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
     Maybe [Command] -> ReaderT ManageOptions m ()
 start m_cmds = do
     mo <- ask
