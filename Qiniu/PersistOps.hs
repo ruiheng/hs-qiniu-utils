@@ -65,7 +65,7 @@ type QiniuPfopMonad m = (MonadIO m, MonadCatch m, MonadLogger m, MonadReader Man
 type AvthumbFormat = Text
 
 -- | 音视频处理
-data AvthumbSubOp = AvthumbOpBitRate Int        -- ^ /ab/<BitRate>k
+data AvthumbSubOp = AvthumbOpAudioBitRate Int        -- ^ /ab/<BitRate>k
                   | AvthumbOpAudioQuality Int   -- ^ /aq/<AudioQuality>
                   | AvthumbOpSamplingRate Int   -- ^ 采样频率，单位HZ
                   | AvthumbOpAudioCodec Text    -- ^ 编码方案．如 libx264
@@ -79,7 +79,7 @@ data AvthumbSubOp = AvthumbOpBitRate Int        -- ^ /ab/<BitRate>k
 
 encodeAvthumbOpAsPath :: AvthumbSubOp -> Text
 -- {{{1
-encodeAvthumbOpAsPath (AvthumbOpBitRate k)                    = "ab/" <> tshow k <> "k"
+encodeAvthumbOpAsPath (AvthumbOpAudioBitRate k)               = "ab/" <> tshow k <> "k"
 encodeAvthumbOpAsPath (AvthumbOpAudioQuality q)               = "aq/" <> tshow q
 encodeAvthumbOpAsPath (AvthumbOpSamplingRate r)               = "ar/" <> tshow r
 encodeAvthumbOpAsPath (AvthumbOpAudioCodec c)                 = "acodec/" <> c
