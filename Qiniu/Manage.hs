@@ -6,6 +6,7 @@ module Qiniu.Manage where
 
 -- {{{1 imports
 import           ClassyPrelude hiding (try)
+import           Control.Monad.Logger
 import qualified Data.Aeson.TH as AT
 import qualified Data.ByteString.Base64.URL as B64U
 
@@ -21,6 +22,7 @@ import           Qiniu.Utils (lowerFirst, ServerTimeStamp(..))
 import           Qiniu.Types
 import           Qiniu.Security
 import           Qiniu.WS.Types
+import           Qiniu.Error
 -- }}}1
 
 
@@ -62,6 +64,48 @@ stat secret_key access_key entry = runExceptT $ do
   where
     url_path = "/stat/" <> encodedEntryUri entry
     req = manageApiReqGet url_path
+-- }}}1
+
+
+-- | Test whether an entry already exists and with the same etag
+alreadyExistsAndMatch :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+                      => SecretKey
+                      -> AccessKey
+                      -> Entry
+                      -> m (Maybe EtagHash)  -- ^ 已有文件的hash. Nothing 代表不检查Etag
+                      -> m (WsResult Bool)
+-- {{{1
+alreadyExistsAndMatch secret_key access_key entry get_local_etag = do
+  err_or_st <- fmap packError $ stat secret_key access_key entry
+  case err_or_st of
+    Left err -> if isResourceDoesNotExistError err
+                   then return $ Right $ Right False
+                   else return $ either Left (Right . Left) err
+    Right st -> do
+      m_etag <- get_local_etag
+      return $ Right $ Right $
+        case m_etag of
+          Nothing   -> True
+          Just etag -> if etag == eStatHash st
+                          then True
+                          else False
+-- }}}1
+
+-- | Like alreadyExistsAndMatch, but consider any error as 'does not exist'
+alreadyExistsAndMatch' :: (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m)
+                       => SecretKey
+                       -> AccessKey
+                       -> Entry
+                       -> m (Maybe EtagHash)  -- ^ 已有文件的hash
+                       -> m Bool
+-- {{{1
+alreadyExistsAndMatch' secret_key access_key entry get_local_etag = do
+  err_or_exists <- fmap packError $ alreadyExistsAndMatch secret_key access_key entry get_local_etag
+  case err_or_exists of
+    Right x -> return x
+    Left err -> do
+      $logError $ "alreadyExistsAndMatch failed: " <> tshow err
+      return False
 -- }}}1
 
 
