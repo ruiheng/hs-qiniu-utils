@@ -69,6 +69,10 @@ encodedEntryUri (bucket, key) =
     B64U.encode $ TE.encodeUtf8 $ fromString $ unBucket bucket ++ ":" ++ unResourceKey key
 
 
+newtype EtagHash = EtagHash { unEtagHash :: String }
+  deriving (Eq, Ord, Show, FromJSON, ToJSON)
+
+
 -- | 持久化数据处理的队列
 newtype Pipeline = Pipeline { unPipeline :: Text }
                         deriving (Eq, Ord, Show, FromJSON, ToJSON)
@@ -152,7 +156,7 @@ newtype AccessToken = AccessToken { unAccessToken :: ByteString }
 
 -- | 上传文件及抓取第三方资源都返回这样的值
 data UploadedFileInfo = UploadedFileInfo {
-                            ufiHash     :: String
+                            ufiHash     :: EtagHash
                             , ufiKey    :: ResourceKey
                         }
                         deriving (Eq, Show)

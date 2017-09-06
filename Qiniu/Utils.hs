@@ -2,12 +2,10 @@ module Qiniu.Utils where
 
 -- {{{1 imports
 import ClassyPrelude
-import qualified Data.ByteString.Base64.URL as B64U
-import qualified Data.ByteString.Char8      as C8
 
 import qualified Data.Char                  as Char
 import Data.Scientific                      (floatingOrInteger)
-import Data.Aeson                           ( withScientific, withText
+import Data.Aeson                           ( withScientific
                                             , FromJSON, parseJSON
                                             , ToJSON, toJSON
                                             , Value
@@ -44,22 +42,6 @@ instance ToJSON ServerTimeStamp where
                 . realToFrac
                 . utcTimeToPOSIXSeconds
                 . unServerTimeStamp
--- }}}1
-
-
-newtype UrlSafeEncoded = UrlSafeEncoded { unUrlSafeEncoded :: ByteString }
-                        deriving (Eq, Ord)
-
--- {{{1 instances
-instance Show UrlSafeEncoded where
-    show (UrlSafeEncoded x) = "UrlSafeEncoded:" ++ (C8.unpack $ B64U.encode x)
-
-instance FromJSON UrlSafeEncoded where
-    parseJSON = withText "url-safe-encoded bytestring" $
-        either fail (return . UrlSafeEncoded) . B64U.decode . encodeUtf8
-
-instance ToJSON UrlSafeEncoded where
-    toJSON = toJSON . C8.unpack . B64U.encode . unUrlSafeEncoded
 -- }}}1
 
 

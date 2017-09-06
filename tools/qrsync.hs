@@ -15,7 +15,6 @@ import ClassyPrelude hiding (catch
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString            as B
 import qualified Data.Yaml                  as Y
-import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text.IO               as T
 import qualified Control.Monad.Trans.State  as S
 import qualified Network.Wreq.Session       as WS
@@ -173,16 +172,16 @@ uploadOneFile sess fp = do
             Right (Right (UploadedFileInfo etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
                 putStrLn $ fromString $ "File '" <> fp <> "' uploaded to " <> show scope
-                putStrLn $ fromString $ "ETag: " <> etag
+                putStrLn $ fromString $ "ETag: " <> unEtagHash etag
 -- }}}1
 
 
 lookupStateFile :: (MonadIO m)
-                => ByteString  -- ^ etag
+                => EtagHash
                 -> m (FilePath, Maybe RecoverUploadInfo)
 -- {{{1
 lookupStateFile etag = liftIO $ do
-    let state_fp = ".up_state." ++ C8.unpack etag ++ ".yml"
+    let state_fp = ".up_state." ++ (unEtagHash etag) ++ ".yml"
     err_or_rui <- Y.decodeFileEither state_fp
     case err_or_rui of
         Left _ -> return (state_fp, Nothing)
@@ -270,13 +269,13 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
             Right (Right (UploadedFileInfo r_etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
                 putStrLn $ fromString $ "File '" ++ fp ++ "' uploaded to " ++ show scope
-                putStrLn $ fromString $ "ETag: " ++ r_etag
+                putStrLn $ fromString $ "ETag: " ++ unEtagHash r_etag
 
                 -- delete state file only server reports success
                 when cr_mode $ do
                     removeIfExists state_fp
 
-                when (r_etag /= C8.unpack etag) $ do
+                when (r_etag /= etag) $ do
                     T.hPutStrLn stderr $ "etag mismatch"
                     exitFailure
 -- }}}1

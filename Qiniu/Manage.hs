@@ -16,7 +16,7 @@ import           Network.HTTP.Client (httpLbs, Request, Manager, host, path, url
                                       setQueryString, defaultRequest)
 import           Data.Conduit (Source, yield)
 
-import           Qiniu.Utils (lowerFirst, ServerTimeStamp(..), UrlSafeEncoded(..))
+import           Qiniu.Utils (lowerFirst, ServerTimeStamp(..))
 
 import           Qiniu.Types
 import           Qiniu.Security
@@ -42,7 +42,7 @@ manageApiReqPost post_params uri_path =
 data EntryStat =
        EntryStat
          { eStatFsize :: Int64
-         , eStatHash :: UrlSafeEncoded
+         , eStatHash :: EtagHash
          , eStatMimeType :: String
          , eStatPutTime :: ServerTimeStamp
          }
@@ -138,7 +138,7 @@ data ListItem =
        ListItem
          { liKey :: String
          , liPutTime :: ServerTimeStamp
-         , liHash :: UrlSafeEncoded
+         , liHash :: EtagHash
          , liFsize :: Int64
          , liMimeType :: String
          , liCustomer :: Maybe String

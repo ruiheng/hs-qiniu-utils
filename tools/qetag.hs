@@ -3,18 +3,19 @@ module Main where
 import ClassyPrelude
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Qiniu.ByteString
 import System.Exit                          (exitFailure)
 
 import qualified Data.ByteString.Lazy       as LB
-import qualified Data.ByteString.Char8      as B8
+
+import Qiniu.Types
+import Qiniu.ByteString
 
 printETag :: Bool -> FilePath -> IO ()
 printETag print_name name = do
     etag <- fmap hetagL $ LB.readFile name
     when print_name $
       putStr $ fromString $ name <> ": "
-    B8.putStrLn etag
+    putStrLn $ fromString $ unEtagHash etag
 
 main :: IO ()
 main = do
