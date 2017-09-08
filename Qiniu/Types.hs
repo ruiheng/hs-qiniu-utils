@@ -181,20 +181,16 @@ logSource = "QiNiu"
 -- 这里的算法与文档所述并不完全一致，但按逻辑推理应该是可用的。
 -- 这个函数的效果是让以下的恒等式成立。
 -- unEscapeString (keyToUrlPath (ResourceKey k)) == '/' : k
+-- XXX: 上面的文档已经过时．七牛上另有一篇类似的文档，但是似乎也是过时的
+-- 七牛官方的qshell工具并没有使用这个转义法．
+-- 根据qshell的代码（src/qiniu/api.v6/url/urlescape.go
+-- 只需要转义`?`即可．实测`#`也需要转义
+-- 七牛签名要求的url是要恰到好处的转义，完全没转义的不能用，完全转义的也不能用
 keyToUrlPath :: ResourceKey -> String
 -- {{{1
-keyToUrlPath (ResourceKey key) = '/' : esc parts
+keyToUrlPath (ResourceKey key) = '/' : escapeURIString isSafe key
     where
-        parts = splitWhen (== '/') key
-
-        esc []      = ""
-        esc ("":[]) = ""
-        esc (x:xs)  =   let t = esc xs
-                            s = if null x
-                                    then "%2F"
-                                    else escapeURIString isUnreserved x ++
-                                            (if null t && xs /= [""] then "" else "/")
-                         in s ++ t
+      isSafe = flip notElem $ asString "?#"
 -- }}}1
 
 
