@@ -114,7 +114,7 @@ uploadMkblk block_size bs = runExceptT $ do
       host = getHost region ServerUpload False
       url = host ++ "/mkblk/" ++ show block_size
 
-  -- $logDebugS logSource $ T.pack $ "POSTing to: " <> url
+  --   $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
   rb <- ExceptT $ liftIO $ try $ WS.postWith opts sess url bs
   runExceptT $ do
     r <- ExceptT $ asWsResponseNormal rb
@@ -136,7 +136,7 @@ uploadBput cpr bs = runExceptT $ do
       ctx = cprCtx cpr
       url = host ++ "/bput/" ++ ctx ++ "/" ++ show offset
 
-  -- $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
+  --   $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
   (asWsResponseNormal' =<<) $ ExceptT $ liftIO $ try $ WS.postWith opts sess url bs
 -- }}}1
 
@@ -196,7 +196,7 @@ uploadMkfile file_size m_key m_mime host ctx_list = runExceptT $ do
                             <$> m_key) ++
             (fromMaybe "" $ flip fmap m_mime $ ("/mimeType/" ++) . C8.unpack . B64U.encode)
 
-  -- $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
+  --   $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
   rb <- ExceptT $ liftIO $ try $ WS.postWith opts sess url $
           UTF8.fromString $ concat $ intersperse "," ctx_list
   asWsResponseNormal' rb
