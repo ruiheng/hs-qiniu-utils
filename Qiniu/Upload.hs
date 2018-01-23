@@ -9,7 +9,6 @@ module Qiniu.Upload where
 
 -- {{{1 imports
 import           ClassyPrelude hiding (try, finally)
-import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Aeson.TH as AT
 import qualified Data.ByteString.Base64.URL as B64U
@@ -18,7 +17,7 @@ import qualified Data.Map as Map
 import qualified Data.ByteString.UTF8 as UTF8
 import           Control.Monad.Trans.Except (runExceptT, ExceptT(..))
 import           Control.Monad.Catch (try, finally)
-import           Control.Monad.Logger (MonadLogger, logDebugS, logInfoS)
+import           Control.Monad.Logger
 import           Control.Monad.Trans.Control (MonadBaseControl, liftBaseWith, restoreM)
 import           Control.Concurrent.STM (check)
 #if !MIN_VERSION_classy_prelude(1, 0, 0)

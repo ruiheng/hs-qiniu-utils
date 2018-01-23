@@ -15,7 +15,7 @@ import           Database.Persist.Sql (PersistFieldSql)
 import           Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import           Data.Aeson (FromJSON, ToJSON, toJSON, object, (.=))
 import           Data.Time (NominalDiffTime, addUTCTime)
-import           Network.URI (isUnreserved, escapeURIString)
+import           Network.URI (escapeURIString)
 -- }}}1
 
 

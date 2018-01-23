@@ -8,17 +8,17 @@ module Qiniu.Manage where
 -- {{{1 imports
 import           ClassyPrelude hiding (try)
 import qualified Control.Exception.Lifted as Lifted
-import           Control.Lens (view)
+import           Control.Lens (view, (&), (.~))
 import           Control.Monad.Logger
 import qualified Data.Aeson.TH as AT
 import qualified Data.ByteString.Base64.URL as B64U
+import qualified Data.ByteString.Char8 as C8
 
 -- import Control.Monad.Logger                 (MonadLogger, logDebugS, logInfoS)
 import           Control.Monad.Trans.Except (runExceptT, ExceptT(..))
 import           Control.Monad.Catch (try)
-import           Network.HTTP.Client (httpLbs, Request, Manager, host, path, urlEncodedBody,
-                                      setQueryString, defaultRequest)
-import           Network.Wreq (responseBody)
+import           Network.Wreq (responseBody, defaults, param)
+import qualified Network.Wreq.Session as WS
 import           Data.Conduit (Source, yield)
 
 import           Qiniu.Utils (lowerFirst, ServerTimeStamp(..))
@@ -34,15 +34,15 @@ import           Qiniu.Error
 manageApiHost :: IsString a => a
 manageApiHost = "rs.qiniu.com"
 
+manageApiHostF :: IsString a => a
+manageApiHostF = "rsf.qbox.me"
 
-manageApiReqGet :: ByteString -> Request
-manageApiReqGet uri_path =
-  defaultRequest { host = manageApiHost, path = uri_path }
+manageApiUrl :: String -> String
+manageApiUrl p = "http://" <> manageApiHost <> p
 
+manageApiUrlF :: String -> String
+manageApiUrlF p = "http://" <> manageApiHostF <> p
 
-manageApiReqPost :: [(ByteString, ByteString)] -> ByteString -> Request
-manageApiReqPost post_params uri_path =
-  urlEncodedBody post_params $ manageApiReqGet uri_path
 
 
 data EntryStat =
@@ -56,25 +56,26 @@ data EntryStat =
 
 $(AT.deriveJSON AT.defaultOptions { AT.fieldLabelModifier = lowerFirst . drop 5 } ''EntryStat)
 
-stat :: (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
+stat :: (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
      => SecretKey
      -> AccessKey
-     -> Entry -> m (WsResult EntryStat)
+     -> Entry
+     -> m (WsResult EntryStat)
 -- {{{1
 stat secret_key access_key entry = runExceptT $ do
-  mgmt <- ask
-  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
-  resp <- ExceptT $ try $ liftIO $ httpLbs req' mgmt
+  sess <- ask
+  opts <- liftIO $ applyAccessTokenGet secret_key access_key url_path defaults
+  resp <- ExceptT $ try $ liftIO $ WS.getWith opts sess url
   asWsResponseNormal' resp `Lifted.onException`
     ($logErrorS logSource $ "Cannot parse response body: " <> toStrict (decodeUtf8 (view responseBody resp)))
   where
     url_path = "/stat/" <> encodedEntryUri entry
-    req = manageApiReqGet url_path
+    url = manageApiUrl $ C8.unpack url_path
 -- }}}1
 
 
 -- | Test whether an entry already exists and with the same etag
-alreadyExistsAndMatch :: (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
+alreadyExistsAndMatch :: (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
                       => SecretKey
                       -> AccessKey
                       -> Entry
@@ -98,7 +99,7 @@ alreadyExistsAndMatch secret_key access_key entry get_local_etag = do
 -- }}}1
 
 -- | Like alreadyExistsAndMatch, but consider any error as 'does not exist'
-alreadyExistsAndMatch' :: (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadLogger m, MonadBaseControl IO m)
+alreadyExistsAndMatch' :: (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadLogger m, MonadBaseControl IO m)
                        => SecretKey
                        -> AccessKey
                        -> Entry
@@ -115,22 +116,23 @@ alreadyExistsAndMatch' secret_key access_key entry get_local_etag = do
 -- }}}1
 
 
-delete :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+delete :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
        => SecretKey
        -> AccessKey
        -> Entry -> m (WsResult ())
 -- {{{1
 delete secret_key access_key entry = runExceptT $ do
-  mgmt <- ask
-  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+  sess <- ask
+  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
+  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
   where
     url_path = "/delete/" <> encodedEntryUri entry
-    req = manageApiReqPost [] url_path
+    url = manageApiUrl $ C8.unpack url_path
+    post_data = mempty :: ByteString
 -- }}}1
 
 
-copy :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+copy :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
      => SecretKey
      -> AccessKey
      -> Entry        -- ^ from
@@ -138,17 +140,18 @@ copy :: (MonadIO m, MonadReader Manager m, MonadCatch m)
      -> m (WsResult ())
 -- {{{1
 copy secret_key access_key entry_from entry_to = runExceptT $ do
-  mgmt <- ask
-  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+  sess <- ask
+  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
+  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
   where
     url_path = "/copy/" <> encodedEntryUri entry_from
                <> "/" <> encodedEntryUri entry_to
-    req = manageApiReqPost [] url_path
+    url = manageApiUrl $ C8.unpack url_path
+    post_data = mempty :: ByteString
 -- }}}1
 
 
-move :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+move :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
      => SecretKey
      -> AccessKey
      -> Entry        -- ^ from
@@ -156,17 +159,19 @@ move :: (MonadIO m, MonadReader Manager m, MonadCatch m)
      -> m (WsResult ())
 -- {{{1
 move secret_key access_key entry_from entry_to = runExceptT $ do
-  mgmt <- ask
-  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+  sess <- ask
+  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
+  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
   where
     url_path = "/move/" <> encodedEntryUri entry_from
                <> "/" <> encodedEntryUri entry_to
-    req = manageApiReqPost [] url_path
+    url = manageApiUrl $ C8.unpack url_path
+    post_data = mempty :: ByteString
 -- }}}1
 
 
-chgm :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+-- | TODO: 未实现修改 meta_key 及 cond
+chgm :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
      => SecretKey
      -> AccessKey
      -> Entry
@@ -174,13 +179,14 @@ chgm :: (MonadIO m, MonadReader Manager m, MonadCatch m)
      -> m (WsResult ())
 -- {{{1
 chgm secret_key access_key entry mime = runExceptT $ do
-  mgmt <- ask
-  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+  sess <- ask
+  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
+  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
   where
     url_path = "/chgm/" <> encodedEntryUri entry
                <> "/mime/" <> B64U.encode mime
-    req = manageApiReqPost [] url_path
+    url = manageApiUrl $ C8.unpack url_path
+    post_data = mempty :: ByteString
 -- }}}1
 
 
@@ -208,7 +214,7 @@ data ListResult =
 $(AT.deriveJSON AT.defaultOptions { AT.fieldLabelModifier = lowerFirst . drop 2 } ''ListResult)
 
 
-list :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+list :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
      => SecretKey
      -> AccessKey
      -> Bucket
@@ -220,23 +226,23 @@ list :: (MonadIO m, MonadReader Manager m, MonadCatch m)
 -- {{{1
 list secret_key access_key bucket limit delimiter prefix marker =
   runExceptT $ do
-    mgmt <- ask
-    req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
-    asWsResponseNormal' =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+    let opts0 = defaults
+                  & param "bucket" .~ [fromString $ unBucket bucket]
+                  & param "limit" .~ [ tshow $ min 1000 $ max 1 limit ]
+                  & param "prefix" .~ [fromString prefix]
+                  & param "delimiter" .~ [fromString delimiter]
+                  & param "marker" .~ [fromString marker]
+
+    sess <- ask
+    opts <- liftIO $ applyAccessTokenGet secret_key access_key url_path opts0
+    asWsResponseNormal' =<< (ExceptT $ try $ liftIO $ WS.getWith opts sess url)
   where
     url_path = "/list"
-    req = setQueryString
-            [ ("bucket", Just (fromString $ unBucket bucket))
-            , ("limit", Just (fromString $ show $
-                                min 1000 $ max 1 limit))
-            , ("prefix", Just (fromString prefix))
-            , ("delimiter", Just (fromString delimiter))
-            , ("marker", Just (fromString marker))
-            ] $ (manageApiReqPost [] url_path) { host = "rsf.qbox.me" }
+    url = manageApiUrlF $ C8.unpack url_path
 -- }}}1
 
 
-listSource :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+listSource :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
            => SecretKey
            -> AccessKey
            -> Bucket
@@ -261,7 +267,7 @@ listSource secret_key access_key bucket limit delimiter prefix = do
 -- }}}1
 
 
-fetch :: (MonadIO m, MonadReader Manager m, MonadCatch m)
+fetch :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
       => SecretKey
       -> AccessKey
       -> Text         -- ^ from url
@@ -269,13 +275,13 @@ fetch :: (MonadIO m, MonadReader Manager m, MonadCatch m)
       -> m (WsResult UploadedFileInfo)
 -- {{{1
 fetch secret_key access_key url_from scope_to = runExceptT $ do
-  mgmt <- ask
-  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
-  asWsResponseNormal' =<< (ExceptT $ try $ liftIO $ httpLbs req' mgmt)
+  sess <- ask
+  opts <- liftIO $ applyAccessTokenGet secret_key access_key url_path defaults
+  asWsResponseNormal' =<< (ExceptT $ try $ liftIO $ WS.getWith opts sess url)
   where
     url_path = "/fetch/" <> B64U.encode (encodeUtf8 url_from)
                <> "/to/" <> encodedScopeUri scope_to
-    req = (manageApiReqPost [] url_path) { host = "iovip.qbox.me" }
+    url = "http://iovip.qbox.me" <> C8.unpack url_path
 -- }}}1
 
 

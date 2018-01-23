@@ -17,19 +17,19 @@ module Qiniu.PersistOps
 
 -- {{{1 imports
 import ClassyPrelude hiding (try)
+import Control.Lens
 import Control.Monad.Catch                  (try)
 import Control.Monad.Logger
 import Control.Monad.Except                 (runExceptT, ExceptT(..))
 import Data.Aeson
+import qualified Data.ByteString.Char8      as C8
 #if defined(PERSISTENT)
 import Database.Persist                     (PersistField)
 import Database.Persist.Sql                 (PersistFieldSql)
 #endif
-import Network.HTTP.Client                  ( httpLbs, Request, Manager, host, path
-                                            , urlEncodedBody, setQueryString
-                                            , defaultRequest
-                                            )
 
+import           Network.Wreq               (defaults, param, FormParam((:=)))
+import qualified Network.Wreq.Session       as WS
 import Qiniu.Types
 import Qiniu.Security
 import Qiniu.WS.Types
@@ -41,15 +41,8 @@ import Qiniu.WS.Types
 persistOpApiHost :: IsString a => a
 persistOpApiHost = "api.qiniu.com"
 
-
-persistOpApiReqGet :: ByteString -> Request
-persistOpApiReqGet uri_path =
-  defaultRequest { host = persistOpApiHost, path = uri_path }
-
-
-persistOpApiReqPost :: [(ByteString, ByteString)] -> ByteString -> Request
-persistOpApiReqPost post_params uri_path =
-  urlEncodedBody post_params $ persistOpApiReqGet uri_path
+persistOpApiUrl :: String -> String
+persistOpApiUrl p = "http://" <> persistOpApiHost <> p
 
 
 newtype PersistentId = PersistentId { unPersistentId :: Text }
@@ -59,7 +52,7 @@ deriving instance PersistField PersistentId
 
 deriving instance PersistFieldSql PersistentId
 #endif
-type QiniuPfopMonad m = (MonadIO m, MonadCatch m, MonadLogger m, MonadReader Manager m)
+type QiniuPfopMonad m = (MonadIO m, MonadCatch m, MonadLogger m, MonadReader WS.Session m)
 
 -- | 音视频处理的格式参数
 type AvthumbFormat = Text
@@ -121,24 +114,24 @@ persistOpsOnSaved :: QiniuPfopMonad m
                   -> m (WsResult PersistentId)
 -- {{{1
 persistOpsOnSaved secret_key access_key ops (bucket, rkey) m_notify_url m_pipeline forced = runExceptT $ do
-  mgmt <- ask
-  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
+  sess <- ask
+  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
   fmap (fmap unPfopResp) $ (asWsResponseNormal' =<<) $
-    ExceptT $ try $ liftIO $ httpLbs req' mgmt
+    ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data
   where
     url_path = "/pfop/"
     fops_cmd = encodeFopCmdList ops :: Text
     post_data = catMaybes
-                  [ Just $ ("bucket", encodeUtf8 (fromString $ unBucket bucket))
-                  , Just $ ("key", encodeUtf8 (fromString $ unResourceKey rkey))
-                  , Just $ ("fops", (encodeUtf8 fops_cmd :: ByteString))
-                  , flip fmap m_notify_url $ \x -> ("notifyURL", encodeUtf8 x)
-                  , flip fmap m_pipeline $ \pl -> ("pipeline", encodeUtf8 (unPipeline pl))
+                  [ Just $ "bucket" := unBucket bucket
+                  , Just $ "key" := unResourceKey rkey
+                  , Just $ "fops" := fops_cmd
+                  , flip fmap m_notify_url $ \ x -> "notifyURL" := x
+                  , flip fmap m_pipeline $ \ pl -> "pipeline" := unPipeline pl
                   , if forced
-                      then Just $ ("force", "1")
-                      else Nothing
+                       then Just $ "force" := ("1" :: String)
+                       else Nothing
                   ]
-    req = persistOpApiReqPost post_data url_path
+    url = persistOpApiUrl $ C8.unpack url_path
 -- }}}1
 
 
@@ -257,14 +250,15 @@ persistOpsQuery :: QiniuPfopMonad m
                 -> m (WsResult PersistOpInfo)
 -- {{{1
 persistOpsQuery secret_key access_key pid = runExceptT $ do
-  mgmt <- ask
-  req' <- liftIO $ applyAccessTokenForReq secret_key access_key req
+  sess <- ask
+  let opts0 = defaults & param "id" .~ [unPersistentId pid]
+
+  opts <- liftIO $ applyAccessTokenGet secret_key access_key url_path opts0
   (asWsResponseNormal' =<<) $
-    ExceptT $ try $ liftIO $ httpLbs req' mgmt
+    ExceptT $ try $ liftIO $ WS.getWith opts sess url
   where
     url_path = "/status/get/prefop"
-    req = setQueryString [("id", Just (encodeUtf8 $ unPersistentId pid))] $ persistOpApiReqPost []
-                                                                              url_path
+    url = persistOpApiUrl $ C8.unpack url_path
 -- }}}1
 
 

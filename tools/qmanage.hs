@@ -23,11 +23,9 @@ import qualified Text.Parsec                as TP
 import qualified Text.Parsec.Token          as TPT
 import Text.Parsec.Language                 (haskellDef)
 import Data.Char                            (isSpace, isAlphaNum)
-import Network.HTTP.Client                  (newManager, Manager
-                                            , defaultManagerSettings
-                                            )
 import Data.Conduit                         (($$))
 import qualified Data.Conduit.List          as CL
+import qualified Network.Wreq.Session       as WS
 
 import Qiniu.Types
 import Qiniu.WS.Types
@@ -179,7 +177,7 @@ printResult f ws_result = do
 
 
 processCmd ::
-    (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
+    (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
     SecretKey -> AccessKey -> Command -> m ()
 processCmd secret_key access_key (Stat entry) = do
     (stat secret_key access_key entry) >>= printResult f
@@ -204,7 +202,7 @@ processCmd secret_key access_key (Fetch url scope) = do
 
 
 interactive ::
-    (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
+    (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
     SecretKey -> AccessKey -> m ()
 interactive secret_key access_key = do
     liftIO $ hSetBuffering stdout NoBuffering
@@ -234,7 +232,7 @@ interactive secret_key access_key = do
 
 
 start ::
-    (MonadIO m, MonadReader Manager m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
+    (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
     Maybe [Command] -> ReaderT ManageOptions m ()
 start m_cmds = do
     mo <- ask
@@ -245,11 +243,11 @@ start m_cmds = do
             Nothing -> interactive secret_key access_key
             Just cmds -> mapM_ (processCmd secret_key access_key) cmds
 
+
 start' :: ManageOptions -> Maybe [Command] -> IO ()
-start' mo cmds = do
-    mgmt <- newManager defaultManagerSettings
+start' mo cmds = WS.withAPISession $ \ sess -> do
     logger_set <- newStderrLoggerSet 0
-    flip runReaderT mgmt $ do
+    flip runReaderT sess $ do
         runLoggingT
             (runReaderT (start cmds) mo)
             (appLogger logger_set (moVerbose mo))
