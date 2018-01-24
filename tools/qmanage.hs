@@ -273,7 +273,12 @@ start m_cmds = do
 
 
 start' :: ManageOptions -> Maybe [Command] -> IO ()
-start' mo cmds = WS.withAPISession $ \ sess -> do
+start' mo cmds = do
+#if MIN_VERSION_wreq(0, 5, 2)
+    sess <- WS.newAPISession
+#else
+  WS.withAPISession $ \ sess -> do
+#endif
     logger_set <- newStderrLoggerSet 0
     flip runReaderT sess $ do
         runLoggingT
