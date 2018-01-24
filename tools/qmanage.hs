@@ -15,6 +15,7 @@ import qualified Data.Text.IO               as T
 import Options.Applicative
 import System.IO                            (hSetBuffering, BufferMode(..))
 
+import Control.Arrow                        (left)
 import Control.Monad.Logger
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet, LoggerSet)
 import Control.Monad.Catch                  (try)
@@ -64,6 +65,52 @@ data Command = Stat Entry
             | Fetch Text Scope
             deriving (Show)
 
+
+tpReaderM :: TP.Parsec String () a -> ReadM a
+tpReaderM p = eitherReader $ left show . TP.parse p ""
+
+parseCommandCml :: Parser Command
+parseCommandCml = subparser
+  ( command "stat" (info (Stat <$> entry_arg) (progDesc "get 'stat' on an entry"))
+  <> command "delete" (info (Delete <$> entry_arg) (progDesc "delete an entry"))
+  <> command "copy" (info (Copy <$> entry_arg <*> entry_arg) (progDesc "copy an entry to another"))
+  <> command "move" (info (Move <$> entry_arg <*> entry_arg) (progDesc "move an entry"))
+  <> command "change-mime" (info (ChangeMime <$> entry_arg <*> mime_arg) (progDesc "change mime type of an entry"))
+  <> command "list" (info (List <$> bucket_arg <*> argument auto (metavar "PREFIX")) (progDesc "list entries with specified prefix"))
+  <> command "fetch" (info (Fetch <$> argument auto (metavar "URL") <*> scope_arg) (progDesc "fetch file from URL into the Scope"))
+  )
+  where
+    entry_arg = argument (tpReaderM p_entry) (metavar "ENTRY")
+    mime_arg = argument auto (metavar "MIME")
+    bucket_arg = argument (tpReaderM p_bucket) (metavar "BUCKET")
+    scope_arg = argument (tpReaderM p_scope) (metavar "SCOPE")
+
+
+p_bucket :: TP.ParsecT String u Identity Bucket
+p_bucket = do
+    fmap Bucket $ TP.many1 $ TP.satisfy (\x -> isAlphaNum x || x == '-')
+
+p_rkey :: TP.ParsecT String u Identity ResourceKey
+p_rkey = do
+    fmap ResourceKey $ TP.many1 $ TP.satisfy (not . isSpace)
+
+p_entry :: TP.ParsecT String u Identity (Bucket, ResourceKey)
+p_entry = (TP.<?> "entry") $ do
+    bucket <- p_bucket
+    _ <- TP.char ':'
+    rkey <- p_rkey
+    return $ (bucket, rkey)
+
+p_scope :: TP.ParsecT String u Identity Scope
+p_scope = do
+    bucket <- p_bucket
+    m_key <- TP.optionMaybe $ do
+                _ <- TP.char ':'
+                p_rkey
+    return $ Scope bucket m_key
+
+
+
 parseCommand :: TP.ParsecT String u Identity (Maybe Command)
 parseCommand = do
     TP.spaces
@@ -76,30 +123,11 @@ parseCommand = do
             "delete"-> Just . Delete <$> p_entry <* (TP.spaces >> TP.eof)
             "copy"  -> Just . uncurry Copy <$> p_two_entries <* (TP.spaces >> TP.eof)
             "move"  -> Just . uncurry Move <$> p_two_entries <* (TP.spaces >> TP.eof)
-            "chgm"  -> Just <$> p_chgm <* (TP.spaces >> TP.eof)
+            "change-mime"  -> Just <$> p_chgm <* (TP.spaces >> TP.eof)
             "list"  -> Just <$> p_list <* (TP.spaces >> TP.eof)
             "fetch" -> fmap Just $ Fetch <$> fmap fromString p_maybe_quoted_s <*> p_scope
             _       -> fail $ "unknown command: " ++ show cmd
     where
-        p_bucket = do
-            fmap Bucket $ TP.many1 $ TP.satisfy (\x -> isAlphaNum x || x == '-')
-
-        p_rkey = do
-            fmap ResourceKey $ TP.many1 $ TP.satisfy (not . isSpace)
-
-        p_entry = do
-            bucket <- p_bucket
-            _ <- TP.char ':'
-            rkey <- p_rkey
-            return $ (bucket, rkey)
-
-        p_scope = do
-            bucket <- p_bucket
-            m_key <- TP.optionMaybe $ do
-                        _ <- TP.char ':'
-                        p_rkey
-            return $ Scope bucket m_key
-
         p_two_entries = do
             e1 <- p_entry
             TP.spaces
@@ -257,7 +285,7 @@ main :: IO ()
 main = execParser opts >>= uncurry start'
     where
         opts = info (helper <*> ((,) <$> parseOptions
-                                    <*> optional (some $ argument cmdInCmdLineReader $ metavar "COMMAND ...")))
+                                    <*> optional (fmap return parseCommandCml)))
                 (fullDesc
                     <> progDesc "Management Tool for QiNiu"
                     <> header "qmanage - manage resources in QiNiu")
