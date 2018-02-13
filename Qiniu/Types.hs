@@ -5,6 +5,8 @@ module Qiniu.Types where
 
 -- {{{1 imports
 import           ClassyPrelude
+import           Data.Byteable        (Byteable(..))
+import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.Aeson.TH as AT
 import qualified Data.Text.Encoding as TE
@@ -71,6 +73,9 @@ encodedEntryUri (bucket, key) =
 
 newtype EtagHash = EtagHash { unEtagHash :: String }
   deriving (Eq, Ord, Show, FromJSON, ToJSON)
+
+instance Byteable EtagHash where
+  toBytes = fst . B16.decode . fromString . unEtagHash
 
 
 -- | 持久化数据处理的队列
