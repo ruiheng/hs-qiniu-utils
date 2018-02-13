@@ -295,7 +295,12 @@ start sess fps = do
 
 start' :: RsyncOptions -> [FilePath] -> IO ()
 -- {{{1
-start' ro fps = WS.withAPISession $ \sess -> do
+start' ro fps = do
+#if MIN_VERSION_wreq(0, 5, 2)
+    sess <- WS.newAPISession
+#else
+ WS.withAPISession $ \sess -> do
+#endif
     logger_set <- newStderrLoggerSet 0
     runLoggingT
         (runReaderT (start sess fps) ro)
