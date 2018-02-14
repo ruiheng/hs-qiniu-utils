@@ -28,8 +28,10 @@ deriving instance PersistFieldSql x
 #else
 #define DERIVE_PERSIST(x)
 #endif
+
+
 newtype Bucket = Bucket { unBucket :: String }
-                deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
 DERIVE_PERSIST(Bucket)
 
