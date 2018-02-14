@@ -73,6 +73,16 @@ stat secret_key access_key entry = runExceptT $ do
     url = manageApiUrl $ C8.unpack url_path
 -- }}}1
 
+statMaybe :: (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
+          => SecretKey
+          -> AccessKey
+          -> Entry
+          -> m (WsResult (Maybe EntryStat))
+-- {{{1
+statMaybe secret_key access_key entry = do
+  fmap maybeDoesNotExists $ stat secret_key access_key entry
+-- }}}1
+
 
 -- | Test whether an entry already exists and with the same etag
 alreadyExistsAndMatch :: (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)

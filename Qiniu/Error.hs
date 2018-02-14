@@ -15,5 +15,11 @@ isResourceAlreadyExistsError :: Either HttpException WsError -> Bool
 isResourceAlreadyExistsError = testWsErrorCode (== 614)
 
 
+maybeDoesNotExists :: WsResult a -> WsResult (Maybe a)
+maybeDoesNotExists old_res =
+  case packError old_res of
+    Left err | isResourceDoesNotExistError err -> Right (Right Nothing)
+    _ -> fmap (fmap Just) old_res
+
 
 -- vim: set foldmethod=marker:
