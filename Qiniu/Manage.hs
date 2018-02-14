@@ -132,6 +132,45 @@ delete secret_key access_key entry = runExceptT $ do
 -- }}}1
 
 
+deleteAfterDays :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
+                => SecretKey
+                -> AccessKey
+                -> Entry
+                -> Maybe Int  -- ^ Nothing: disable lifecyle
+                -> m (WsResult ())
+-- {{{1
+deleteAfterDays secret_key access_key entry m_days = runExceptT $ do
+  sess <- ask
+  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
+  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
+  where
+    url_path = "/deleteAfterDays/" <> encodedEntryUri entry <> "/" <> fromString (show (fromMaybe 0 m_days))
+    url = manageApiUrl $ C8.unpack url_path
+    post_data = mempty :: ByteString
+-- }}}1
+
+
+changeStoreType :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
+                => SecretKey
+                -> AccessKey
+                -> Entry
+                -> FileStoreType
+                -> m (WsResult ())
+-- {{{1
+changeStoreType secret_key access_key entry st = runExceptT $ do
+  sess <- ask
+  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
+  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
+  where
+    url_path = "/chtype/" <> encodedEntryUri entry <> "/type/" <> encode_type st
+    url = manageApiUrl $ C8.unpack url_path
+    post_data = mempty :: ByteString
+
+    encode_type FileStoreStandard = "0"
+    encode_type FileStoreLowFreq  = "1"
+-- }}}1
+
+
 copy :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
      => SecretKey
      -> AccessKey

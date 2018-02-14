@@ -171,6 +171,12 @@ $(AT.deriveJSON
     ''UploadedFileInfo)
 
 
+-- | 存储类型
+data FileStoreType = FileStoreStandard  -- ^ 标准存储
+                   | FileStoreLowFreq    -- ^ 低频存储
+                   deriving (Eq, Ord, Bounded, Enum)
+
+
 logSource :: IsString a => a
 logSource = "QiNiu"
 
