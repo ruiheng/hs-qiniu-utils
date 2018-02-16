@@ -172,12 +172,9 @@ changeStoreType secret_key access_key entry st = runExceptT $ do
   opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
   asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
   where
-    url_path = "/chtype/" <> encodedEntryUri entry <> "/type/" <> encode_type st
+    url_path = "/chtype/" <> encodedEntryUri entry <> "/type/" <> fromString (show (fromEnum st))
     url = manageApiUrl $ C8.unpack url_path
     post_data = mempty :: ByteString
-
-    encode_type FileStoreStandard = "0"
-    encode_type FileStoreLowFreq  = "1"
 -- }}}1
 
 

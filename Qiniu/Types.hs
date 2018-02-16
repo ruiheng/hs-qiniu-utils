@@ -17,6 +17,7 @@ import           Database.Persist.Sql (PersistFieldSql)
 import           Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import           Data.Aeson (FromJSON, ToJSON, toJSON, object, (.=))
 import           Data.Time (NominalDiffTime, addUTCTime)
+import           Network.HTTP (urlEncodeVars)
 import           Network.URI (escapeURIString)
 -- }}}1
 
@@ -112,14 +113,38 @@ encodeFopCmdList :: [FopCmd] -> Text
 encodeFopCmdList ops =
   mconcat $ intersperse ";" $ map (uncurry encodeFopToText') ops
 
+
+data CallbackBodyType = CbQueryString
+                      | CbJson
+                      deriving (Show, Eq, Ord, Enum, Bounded)
+
+-- | 存储类型
+data FileStoreType = FileStoreStandard  -- ^ 标准存储
+                   | FileStoreLowFreq    -- ^ 低频存储
+                   deriving (Eq, Ord, Bounded, Enum)
+
 data PutPolicy =
        PutPolicy
-         { ppScope :: Scope
-         , ppSaveKey :: Maybe ResourceKey
-         , ppDeadline :: UTCTime
-         , ppPersistentOps :: [FopCmd]
+         { ppScope               :: Scope
+         , ppSaveKey             :: Maybe ResourceKey
+         , ppDeadline            :: UTCTime
+         , ppIsPrefixalScope     :: Maybe Bool
+         , ppInsertOnly          :: Maybe Bool
+         , ppEndUser             :: Maybe Text
+         , ppReturnUrl           :: Maybe Text
+         , ppReturnBody          :: Maybe (Map String String)
+         , ppCallbackUrls        :: [Text]
+         , ppCallbackHost        :: Maybe Text
+         , ppCallbackBody        :: Maybe (Map String String)
+         , ppCallbackBodyType    :: Maybe CallbackBodyType
+         , ppPersistentOps       :: [FopCmd]
          , ppPersistentNotifyUrl :: Maybe Text
-         , ppPersistentPipeline :: Maybe Pipeline
+         , ppPersistentPipeline  :: Maybe Pipeline
+         , ppFileSizeMin         :: Maybe Int64
+         , ppFileSizeLimit       :: Maybe Int64
+         , ppDetectMime          :: Maybe Bool
+         , ppMimeLimit           :: Maybe Text
+         , ppFileStoreType       :: Maybe FileStoreType
          }
 
 -- {{{1 instances
@@ -128,13 +153,52 @@ instance ToJSON PutPolicy where
         object $ catMaybes
             [ Just $ "scope"       .= ppScope pp
             , Just $ "saveKey"     .= fmap unResourceKey (ppSaveKey pp)
-            , Just $ "deadline"    .= (round $ utcTimeToPOSIXSeconds $ ppDeadline pp
-                                        :: Int64)
+            , Just $ "deadline"    .= (round $ utcTimeToPOSIXSeconds $ ppDeadline pp :: Int64)
+            , fmap (("isPrefixalScope" .=) . fromEnum) (ppIsPrefixalScope pp)
+            , fmap (("insertOnly" .=) . fromEnum) (ppInsertOnly pp)
+            , fmap ("endUser" .=) (ppEndUser pp)
+            , fmap ("returnUrl" .=) (ppReturnUrl pp)
+            , fmap ("returnBody" .=) (map_to_qs <$> ppReturnBody pp)
+
+            , if null cb_urls
+                 then Nothing
+                 else Just $ "callbackUrl" .= cb_urls
+
+            , if null cb_urls
+                 then Nothing
+                 else fmap ("callbackHost" .=) (ppCallbackHost pp)
+
+            , if null cb_urls
+                 then Nothing
+                 else join $ flip fmap (ppCallbackBodyType pp) $ \ t ->
+                        case t of
+                          CbQueryString -> fmap ("callbackBody" .=) cb_var_map_qs
+                          CbJson -> fmap ("callbackBody" .=) cb_var_map_json
+
+            , if null cb_urls
+                 then Nothing
+                 else flip fmap (ppCallbackBodyType pp) $ \ t ->
+                        case t of
+                          CbQueryString -> "callbackBodyType" .= asText "application/x-www-form-urlencoded"
+                          CbJson -> "callbackBodyType" .= asText "application/json"
+
             , Just $ "persistentOps" .= encodeFopCmdList (ppPersistentOps pp)
             , fmap ("persistentNotifyUrl" .=) (ppPersistentNotifyUrl pp)
             , fmap (("persistentPipeline" .=) . unPipeline)
                     (ppPersistentPipeline pp)
+
+            , fmap ("fsizeMin" .=) (ppFileSizeMin pp)
+            , fmap ("fsizeLimit" .=) (ppFileSizeLimit pp)
+            , fmap ("detectMime" .=) (ppDetectMime pp)
+            , fmap ("mimeLimit" .=) (ppMimeLimit pp)
+            , fmap ("fileType" .=) (fromEnum <$> ppFileStoreType pp)
             ]
+        where
+          cb_urls = ppCallbackUrls pp
+          cb_var_map = ppCallbackBody pp
+          map_to_qs = urlEncodeVars . mapToList
+          cb_var_map_qs = map_to_qs <$> cb_var_map
+          cb_var_map_json = cb_var_map
 -- }}}1
 
 
@@ -147,7 +211,13 @@ mkPutPolicy :: MonadIO m
 mkPutPolicy scope save_key dt = liftIO $ do
   now <- getCurrentTime
   let t = addUTCTime dt now
-  return $ PutPolicy scope save_key t [] Nothing Nothing
+  return $ PutPolicy scope save_key t
+            Nothing
+            Nothing Nothing
+            Nothing Nothing
+            [] Nothing Nothing Nothing
+            [] Nothing Nothing
+            Nothing Nothing Nothing Nothing Nothing
 -- }}}1
 
 
@@ -172,11 +242,6 @@ $(AT.deriveJSON
     AT.defaultOptions{AT.fieldLabelModifier = toLower . drop 3}
     ''UploadedFileInfo)
 
-
--- | 存储类型
-data FileStoreType = FileStoreStandard  -- ^ 标准存储
-                   | FileStoreLowFreq    -- ^ 低频存储
-                   deriving (Eq, Ord, Bounded, Enum)
 
 
 logSource :: IsString a => a
