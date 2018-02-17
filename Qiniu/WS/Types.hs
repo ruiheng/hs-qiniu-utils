@@ -23,7 +23,7 @@ import Control.Lens
 -- }}}1
 
 
-type WsRespBodyNormal = Map String Value
+type WsRespBodyNormal = Map Text Value
 
 -- | 现在发现错误代码可能不会在json结构里出现
 -- 但又不知道是否所有接口都这样
@@ -36,7 +36,7 @@ data WsError =
        WsError
          { __wsHttpCode :: Int
          -- ^ CAUTION: 见下面的注释： 实测看，七牛可能尽量在 http status 中返回错误代码 而不是 json 结构里
-         , wsErrMsg :: String
+         , wsErrMsg :: Text
          }
   deriving (Eq, Show, Typeable)
 
@@ -105,18 +105,18 @@ asWsResponseNormal' rb = runExceptT $ do
 
 respJsonGetByKey :: (MonadThrow m, FromJSON a)
                  => Response WsRespBodyNormal
-                 -> String
+                 -> Text
                  -> m a
 -- {{{1
 respJsonGetByKey r k = do
     v <- maybe
-        (throwM $ JSONError $ "missing key in JSON object: " ++ k)
+        (throwM $ JSONError $ unpack $ "missing key in JSON object: " <> k)
         return
         (lookup k $ r ^. responseBody)
     case A.fromJSON v of
-        A.Error err -> throwM $ JSONError $
-                        "failed to parse value of key '" ++ k
-                            ++ "' in JSON object: " ++ err
+        A.Error err -> throwM $ JSONError $ unpack $
+                        "failed to parse value of key '" <> k
+                            <> "' in JSON object: " <> fromString err
         A.Success x -> return x
 -- }}}1
 
@@ -186,7 +186,7 @@ tryWsResult f = do
 -- | 根据 retryWsCall 的实现，这种函数不但实现错误报告
 -- 还可以实现错误时重试的时间间隔（直接 threadDelay）
 -- 返回值表示是否可以重试
-type OnWsCallError m = String -> Int -> Either HttpException WsError -> m Bool
+type OnWsCallError m = Text -> Int -> Either HttpException WsError -> m Bool
 
 nopOnWsCallError :: Monad m => Int -> OnWsCallError m
 nopOnWsCallError max_try _ call_cnt _ = return $ max_try > call_cnt
@@ -224,7 +224,7 @@ shouldRetryWsCall on_err call_cnt result = do
 -- }}}1
 
 retryWsCall :: Monad m
-            => String                   -- ^ context: error function and the like
+            => Text                   -- ^ context: error function and the like
             -> OnWsCallError m
             -> m (WsResultP a)
             -> m (WsResultP a)

@@ -15,9 +15,9 @@ data QiniuConfig =
          { qiniuConfigSecretKey  :: SecretKey
          , qiniuConfigAccessKey  :: AccessKey
          , qiniuConfigBucket     :: Bucket
-         , qiniuConfigDomain     :: Maybe String
+         , qiniuConfigDomain     :: Maybe Text
          , qiniuConfigSslUrl     :: Bool
-         , qiniuConfigPathPrefix :: String
+         , qiniuConfigPathPrefix :: Text
          -- ^ 把 resource key 当路径用时，总是加上这段路径前缀
          }
   deriving (Eq, Show)
@@ -49,12 +49,12 @@ data QiniuDualConfig =
          { qcDualSecretKey     :: SecretKey
          , qcDualAccessKey     :: AccessKey
          , qcDualPublicBucket  :: Bucket
-         , qcDualPublicDomain  :: Maybe String
+         , qcDualPublicDomain  :: Maybe Text
          , qcDualPublicSslUrl  :: Bool
          , qcDualPrivateBucket :: Bucket
-         , qcDualPrivateDomain :: Maybe String
+         , qcDualPrivateDomain :: Maybe Text
          , qcDualPrivateSslUrl :: Bool
-         , qcDualPathPrefix    :: String
+         , qcDualPathPrefix    :: Text
          , qcDualRegion        :: Region
          }
   deriving (Eq, Show)

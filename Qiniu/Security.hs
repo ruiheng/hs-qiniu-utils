@@ -12,7 +12,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Aeson as A
-import qualified Data.ByteString.UTF8 as UTF8
+import           Data.Text.Encoding         (decodeLatin1)
 import qualified Blaze.ByteString.Builder as BB
 import qualified Blaze.ByteString.Builder.Char.Utf8 as BBU8
 import           Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
@@ -28,56 +28,56 @@ import           Qiniu.HttpClient (replaceReqHttpHeader, requestBodyToBsBuilder)
 
 
 sign :: SecretKey -> ByteString -> ByteString
-sign = hmac SHA1.hash 64 . unSecretKey
+sign = hmac SHA1.hash 64 . encodeUtf8 . unSecretKey
 
 encodedSign :: SecretKey -> ByteString -> ByteString
 encodedSign skey = B64U.encode . sign skey
 
-encodedSign' :: SecretKey -> ByteString -> String
-encodedSign' skey = C8.unpack . encodedSign skey
+encodedSign' :: IsString s => SecretKey -> ByteString -> s
+encodedSign' skey = fromString . C8.unpack . encodedSign skey
 
-newtype UploadToken = UploadToken { unUploadToken :: String }
+newtype UploadToken = UploadToken { unUploadToken :: Text }
 
 uploadToken :: SecretKey -> AccessKey -> PutPolicy -> UploadToken
 -- {{{1
 uploadToken skey akey pp =
-    UploadToken $ concat
-        [ C8.unpack $ unAccessKey akey
+    UploadToken $ mconcat
+        [ unAccessKey akey
         , ":"
         , encoded_sign
         , ":"
-        , C8.unpack $ encoded_pp
+        , decodeLatin1 $ encoded_pp
         ]
     where
         encoded_pp = B64U.encode $ LB.toStrict $ A.encode pp
-        encoded_sign = encodedSign' skey encoded_pp
+        encoded_sign = decodeLatin1 $ encodedSign skey encoded_pp
 -- }}}1
 
-newtype DownloadToken = DownloadToken { unDownloadToken :: String }
+newtype DownloadToken = DownloadToken { unDownloadToken :: Text }
 
 authedDownloadUrl :: SecretKey
                   -> AccessKey
                   -> UTCTime
-                  -> String
-                  -> String
+                  -> Text
+                  -> Text
 -- {{{1
 authedDownloadUrl skey akey expiry url =
-    url2 ++ "&token=" ++ unDownloadToken token
+    url2 <> "&token=" <> unDownloadToken token
     where
-        encoded_sign    = encodedSign' skey $ UTF8.fromString url2
+        encoded_sign    = encodedSign' skey $ encodeUtf8 url2
 
         e               = if '?' `elem` url
                             then "&e="
                             else "?e="
 
-        url2            = concat
+        url2            = mconcat
                             [ url
                             , e
-                            , show (round $ utcTimeToPOSIXSeconds expiry :: Int64)
+                            , tshow (round $ utcTimeToPOSIXSeconds expiry :: Int64)
                             ]
 
-        token           = DownloadToken $ concat
-                            [ C8.unpack $ unAccessKey akey
+        token           = DownloadToken $ mconcat
+                            [ unAccessKey akey
                             , ":"
                             , encoded_sign
                             ]
@@ -96,7 +96,7 @@ mkAccessToken secret_key access_key path qs body_bs =
     AccessToken $ mconcat
         [ unAccessKey access_key
         , ":"
-        , encodedSign secret_key $ LB.toStrict sign_str
+        , encodedSign' secret_key $ LB.toStrict sign_str
         ]
     where
         qm  = fromIntegral $ fromEnum '?'
@@ -138,10 +138,10 @@ mkAccessTokenFromReq secret_key access_key req = do
 
 
 accessTokenHeader :: AccessToken -> Header
-accessTokenHeader atoken = (hAuthorization, "QBox " <> unAccessToken atoken)
+accessTokenHeader atoken = (hAuthorization, "QBox " <> encodeUtf8 (unAccessToken atoken))
 
 setAccessTokenHeaderOptions :: AccessToken -> W.Options -> W.Options
-setAccessTokenHeaderOptions atoken = W.header hAuthorization .~ [ ("QBox " <> unAccessToken atoken) ]
+setAccessTokenHeaderOptions atoken = W.header hAuthorization .~ [ ("QBox " <> encodeUtf8 (unAccessToken atoken)) ]
 
 -- | 在 Http Request 里加入 Access Token 相关的头部信息
 applyAccessTokenForReq :: SecretKey

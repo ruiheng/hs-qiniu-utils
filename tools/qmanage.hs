@@ -61,7 +61,7 @@ data Command = Stat Entry
             | Copy Entry Entry
             | Move Entry Entry
             | ChangeMime Entry ByteString
-            | List Bucket String
+            | List Bucket Text
             | Fetch Text Scope
             deriving (Show)
 
@@ -86,22 +86,22 @@ parseCommandCml = subparser
     scope_arg = argument (tpReaderM p_scope) (metavar "SCOPE")
 
 
-p_bucket :: TP.ParsecT String u Identity Bucket
+p_bucket :: TP.Stream s Identity Char => TP.Parsec s u Bucket
 p_bucket = do
-    fmap Bucket $ TP.many1 $ TP.satisfy (\x -> isAlphaNum x || x == '-')
+    fmap Bucket $ fmap fromString $ TP.many1 $ TP.satisfy (\x -> isAlphaNum x || x == '-')
 
-p_rkey :: TP.ParsecT String u Identity ResourceKey
+p_rkey :: TP.Stream s Identity Char => TP.Parsec s u ResourceKey
 p_rkey = do
-    fmap ResourceKey $ TP.many1 $ TP.satisfy (not . isSpace)
+    fmap ResourceKey $ fmap fromString $ TP.many1 $ TP.satisfy (not . isSpace)
 
-p_entry :: TP.ParsecT String u Identity (Bucket, ResourceKey)
+p_entry :: TP.Stream s Identity Char => TP.Parsec s u (Bucket, ResourceKey)
 p_entry = (TP.<?> "entry") $ do
     bucket <- p_bucket
     _ <- TP.char ':'
     rkey <- p_rkey
     return $ (bucket, rkey)
 
-p_scope :: TP.ParsecT String u Identity Scope
+p_scope :: TP.Stream s Identity Char => TP.Parsec s u Scope
 p_scope = do
     bucket <- p_bucket
     m_key <- TP.optionMaybe $ do
@@ -144,7 +144,7 @@ parseCommand = do
             b <- p_bucket
             TP.spaces
             prefix <- p_maybe_quoted_s
-            return $ List b prefix
+            return $ List b (fromString prefix)
 
         p_mime = p_maybe_quoted_s
 

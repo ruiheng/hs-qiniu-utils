@@ -9,7 +9,6 @@ import           Data.Byteable        (Byteable(..))
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.Aeson.TH as AT
-import qualified Data.Text.Encoding as TE
 #if defined(PERSISTENT)
 import           Database.Persist (PersistField)
 import           Database.Persist.Sql (PersistFieldSql)
@@ -31,13 +30,13 @@ deriving instance PersistFieldSql x
 #endif
 
 
-newtype Bucket = Bucket { unBucket :: String }
+newtype Bucket = Bucket { unBucket :: Text }
   deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
 DERIVE_PERSIST(Bucket)
 
 
-newtype ResourceKey = ResourceKey { unResourceKey :: String }
+newtype ResourceKey = ResourceKey { unResourceKey :: Text }
                 deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
 DERIVE_PERSIST(ResourceKey)
@@ -49,18 +48,19 @@ data Scope = Scope Bucket (Maybe ResourceKey)
 encodedScopeUri :: Scope -> ByteString
 -- {{{1
 encodedScopeUri (Scope bucket m_key) =
-    B64U.encode $ fromString $ unBucket bucket ++
+    B64U.encode $ encodeUtf8 $ unBucket bucket <>
                     case m_key of
-                        Just key -> ":" ++ unResourceKey key
+                        Just key -> ":" <> unResourceKey key
                         Nothing -> ""
 -- }}}1
 
 -- {{{1 instances
 instance Show Scope where
     show (Scope bucket m_key) =
+      unpack $
         case m_key of
             Nothing -> unBucket bucket
-            Just key -> concat [ unBucket bucket, ":", unResourceKey key ]
+            Just key -> mconcat [ unBucket bucket, ":", unResourceKey key ]
 
 instance ToJSON Scope where
     toJSON = toJSON . show
@@ -71,14 +71,14 @@ type Entry = (Bucket, ResourceKey)
 
 encodedEntryUri :: Entry -> ByteString
 encodedEntryUri (bucket, key) =
-    B64U.encode $ TE.encodeUtf8 $ fromString $ unBucket bucket ++ ":" ++ unResourceKey key
+  B64U.encode $ encodeUtf8 (unBucket bucket) <> ":" <> encodeUtf8 (unResourceKey key)
 
 
-newtype EtagHash = EtagHash { unEtagHash :: String }
+newtype EtagHash = EtagHash { unEtagHash :: Text }
   deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
 instance Byteable EtagHash where
-  toBytes = fst . B16.decode . fromString . unEtagHash
+  toBytes = fst . B16.decode . encodeUtf8 . unEtagHash
 
 
 -- | 持久化数据处理的队列
@@ -132,10 +132,10 @@ data PutPolicy =
          , ppInsertOnly          :: Maybe Bool
          , ppEndUser             :: Maybe Text
          , ppReturnUrl           :: Maybe Text
-         , ppReturnBody          :: Maybe (Map String String)
+         , ppReturnBody          :: Maybe (Map Text Text)
          , ppCallbackUrls        :: [Text]
          , ppCallbackHost        :: Maybe Text
-         , ppCallbackBody        :: Maybe (Map String String)
+         , ppCallbackBody        :: Maybe (Map Text Text)
          , ppCallbackBodyType    :: Maybe CallbackBodyType
          , ppPersistentOps       :: [FopCmd]
          , ppPersistentNotifyUrl :: Maybe Text
@@ -196,7 +196,7 @@ instance ToJSON PutPolicy where
         where
           cb_urls = ppCallbackUrls pp
           cb_var_map = ppCallbackBody pp
-          map_to_qs = urlEncodeVars . mapToList
+          map_to_qs = urlEncodeVars . map (unpack *** unpack) . mapToList
           cb_var_map_qs = map_to_qs <$> cb_var_map
           cb_var_map_json = cb_var_map
 -- }}}1
@@ -221,13 +221,13 @@ mkPutPolicy scope save_key dt = liftIO $ do
 -- }}}1
 
 
-newtype SecretKey = SecretKey { unSecretKey :: ByteString }
+newtype SecretKey = SecretKey { unSecretKey :: Text }
                     deriving (Eq, Ord, Show)
 
-newtype AccessKey = AccessKey { unAccessKey :: ByteString }
+newtype AccessKey = AccessKey { unAccessKey :: Text }
                     deriving (Eq, Ord, Show)
 
-newtype AccessToken = AccessToken { unAccessToken :: ByteString }
+newtype AccessToken = AccessToken { unAccessToken :: Text }
                     deriving (Eq, Ord, Show)
 
 
@@ -264,9 +264,9 @@ logSource = "QiNiu"
 -- 根据qshell的代码（src/qiniu/api.v6/url/urlescape.go
 -- 只需要转义`?`即可．实测`#`也需要转义
 -- 七牛签名要求的url是要恰到好处的转义，完全没转义的不能用，完全转义的也不能用
-keyToUrlPath :: ResourceKey -> String
+keyToUrlPath :: IsString s => ResourceKey -> s
 -- {{{1
-keyToUrlPath (ResourceKey key) = '/' : escapeURIString isSafe key
+keyToUrlPath (ResourceKey key) = fromString $ '/' : escapeURIString isSafe (unpack key)
     where
       isSafe = flip notElem $ asString "?#"
 -- }}}1

@@ -15,7 +15,7 @@ printETag print_name name = do
     etag <- fmap hetagL $ LB.readFile name
     when print_name $
       putStr $ fromString $ name <> ": "
-    putStrLn $ fromString $ unEtagHash etag
+    putStrLn $ unEtagHash etag
 
 main :: IO ()
 main = do

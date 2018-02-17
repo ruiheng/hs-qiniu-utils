@@ -49,7 +49,7 @@ data EntryStat =
        EntryStat
          { eStatFsize :: Int64
          , eStatHash :: EtagHash
-         , eStatMimeType :: String
+         , eStatMimeType :: Text
          , eStatPutTime :: ServerTimeStamp
          }
   deriving (Show)
@@ -238,12 +238,12 @@ chgm secret_key access_key entry mime = runExceptT $ do
 
 data ListItem =
        ListItem
-         { liKey :: String
+         { liKey :: Text
          , liPutTime :: ServerTimeStamp
          , liHash :: EtagHash
          , liFsize :: Int64
-         , liMimeType :: String
-         , liCustomer :: Maybe String
+         , liMimeType :: Text
+         , liCustomer :: Maybe Text
          }
   deriving (Show)
 
@@ -251,8 +251,8 @@ $(AT.deriveJSON AT.defaultOptions { AT.fieldLabelModifier = lowerFirst . drop 2 
 
 data ListResult =
        ListResult
-         { lrMarker :: Maybe String
-         , lrCommonPrefixes :: Maybe [String]
+         { lrMarker :: Maybe Text
+         , lrCommonPrefixes :: Maybe [Text]
          , lrItems :: [ListItem]
          }
   deriving (Show)
@@ -265,19 +265,19 @@ list :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
      -> AccessKey
      -> Bucket
      -> Int          -- ^ limit
-     -> String       -- ^ delimiter
-     -> String       -- ^ prefix
-     -> String       -- ^ marker
+     -> Text       -- ^ delimiter
+     -> Text       -- ^ prefix
+     -> Text       -- ^ marker
      -> m (WsResult ListResult)
 -- {{{1
 list secret_key access_key bucket limit delimiter prefix marker =
   runExceptT $ do
     let opts0 = defaults
-                  & param "bucket" .~ [fromString $ unBucket bucket]
+                  & param "bucket" .~ [unBucket bucket]
                   & param "limit" .~ [ tshow $ min 1000 $ max 1 limit ]
-                  & param "prefix" .~ [fromString prefix]
-                  & param "delimiter" .~ [fromString delimiter]
-                  & param "marker" .~ [fromString marker]
+                  & param "prefix" .~ [prefix]
+                  & param "delimiter" .~ [delimiter]
+                  & param "marker" .~ [marker]
 
     sess <- ask
     opts <- liftIO $ applyAccessTokenGet secret_key access_key url_path opts0
@@ -293,8 +293,8 @@ listSource :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
            -> AccessKey
            -> Bucket
            -> Int          -- ^ limit
-           -> String       -- ^ delimiter
-           -> String       -- ^ prefix
+           -> Text       -- ^ delimiter
+           -> Text       -- ^ prefix
            -> Source m ListResult
             -- ^ may throw HttpException or WsError
 -- {{{1

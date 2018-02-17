@@ -14,7 +14,7 @@ import qualified Data.Aeson.TH as AT
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map as Map
-import qualified Data.ByteString.UTF8 as UTF8
+import           Data.Text.Encoding         (decodeLatin1)
 import           Control.Monad.Trans.Except (runExceptT, ExceptT(..))
 import           Control.Monad.Catch (try, finally)
 import           Control.Monad.Logger
@@ -60,18 +60,18 @@ uploadOneShot m_key m_mime fp' bs = runExceptT $ do
              else fp
 
   let getr = liftIO $ try $ WS.post sess host $ catMaybes $
-        [ Just $ partText "token" (fromString $ unUploadToken upload_token)
+        [ Just $ partText "token" (unUploadToken upload_token)
         , Just $ partLBS "file" bs
                  & partFileName .~ (Just fp)
                  & maybe id (\mime -> partContentType .~ Just mime) m_mime
-        , (partString "key" . unResourceKey) <$> m_key
+        , (partText "key" . unResourceKey) <$> m_key
         ]
   rb <- ExceptT getr
   asWsResponseNormal' rb
 -- }}}1
 
 
-data ChunkPutResult = ChunkPutResult { cprCtx :: String, cprOffset :: Int64, cprHost :: String }
+data ChunkPutResult = ChunkPutResult { cprCtx :: Text, cprOffset :: Int64, cprHost :: Text }
   deriving (Eq, Show)
 
 $(AT.deriveJSON AT.defaultOptions { AT.fieldLabelModifier = toLower . drop 3 } ''ChunkPutResult)
@@ -88,10 +88,10 @@ respJsonGetChunkPutResult r = do
 -- }}}1
 
 
-fixHost :: String -> String
+fixHost :: (Eq (Element s), Semigroup s, IsString s, IsSequence s) => s -> s
 fixHost host = if ("http://" `isPrefixOf` host) || ("https://" `isPrefixOf` host)
                  then host
-                 else "http://" ++ host
+                 else "http://" <> host
 
 
 -- | callback with offset of the block
@@ -109,9 +109,9 @@ uploadMkblk block_size bs = runExceptT $ do
   (sess, region, upload_token) <- ask
   let opts = defaults & header "Content-Type" .~ ["application/octet-stream"]
              & header "Authorization" .~
-             [fromString $ "UpToken " ++ unUploadToken upload_token]
+             [encodeUtf8 $ "UpToken " <> unUploadToken upload_token]
       host = getHost region ServerUpload False
-      url = host ++ "/mkblk/" ++ show block_size
+      url = host <> "/mkblk/" <> show block_size
 
   --   $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
   rb <- ExceptT $ liftIO $ try $ WS.postWith opts sess url bs
@@ -129,11 +129,11 @@ uploadBput cpr bs = runExceptT $ do
   (sess, _region, upload_token) <- ask
   let opts = defaults & header "Content-Type" .~ ["application/octet-stream"]
              & header "Authorization" .~
-             [fromString $ "UpToken " ++ unUploadToken upload_token]
+             [encodeUtf8 $ "UpToken " <> unUploadToken upload_token]
       host = fixHost $ cprHost cpr
       offset = cprOffset cpr
       ctx = cprCtx cpr
-      url = host ++ "/bput/" ++ ctx ++ "/" ++ show offset
+      url = unpack $ host <> "/bput/" <> ctx <> "/" <> tshow offset
 
   --   $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
   (asWsResponseNormal' =<<) $ ExceptT $ liftIO $ try $ WS.postWith opts sess url bs
@@ -175,29 +175,30 @@ uploadMkfile :: (QiniuUploadMonad m)
              => Int64                   -- ^ file size
              -> Maybe ResourceKey
              -> Maybe ByteString     -- ^ optionally specify a mime type
-             -> String               -- ^ last host
-             -> [String]             -- ^ list of ctx
+             -> Text               -- ^ last host
+             -> [Text]             -- ^ list of ctx
              -> m (WsResult UploadedFileInfo)
 -- {{{1
 uploadMkfile file_size m_key m_mime host ctx_list = runExceptT $ do
   (sess, _region, upload_token) <- ask
   let opts = defaults & header "Content-Type" .~ ["application/octet-stream"]
              & header "Authorization" .~
-             [fromString $ "UpToken " ++ unUploadToken upload_token]
-      url = fixHost host ++
-            "/mkfile/" ++
-            show file_size ++
-            (fromMaybe "" $ ("/key/" ++)
-                            . C8.unpack
+               [encodeUtf8 $ "UpToken " <> unUploadToken upload_token]
+      url = unpack $
+            fixHost host <>
+            "/mkfile/" <>
+            tshow file_size <>
+            (fromMaybe "" $ ("/key/" <>)
+                            . decodeLatin1
                               . B64U.encode
-                                . UTF8.fromString
+                                . encodeUtf8
                                   . unResourceKey
-                            <$> m_key) ++
-            (fromMaybe "" $ flip fmap m_mime $ ("/mimeType/" ++) . C8.unpack . B64U.encode)
+                            <$> m_key) <>
+            (fromString $ fromMaybe "" $ flip fmap m_mime $ ("/mimeType/" <>) . C8.unpack . B64U.encode)
 
   --   $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
   rb <- ExceptT $ liftIO $ try $ WS.postWith opts sess url $
-          UTF8.fromString $ concat $ intersperse "," ctx_list
+          encodeUtf8 $ intercalate "," ctx_list
   asWsResponseNormal' rb
 -- }}}1
 
@@ -307,7 +308,7 @@ uploadByBlocksContinue on_err on_done thread_num0 rui bs = runExceptT $ do
       m_key = ruiResourceKey rui
       m_mime = ruiMimeType rui
       expected_blk_num = fromIntegral $ (LB.length bs + block_size - 1) `div` block_size
-      blk_cpr_list = take expected_blk_num $ ruiBlockLastCPR rui ++ repeat Nothing
+      blk_cpr_list = take expected_blk_num $ ruiBlockLastCPR rui <> repeat Nothing
 
   let actions =
         map (ExceptT .
@@ -403,10 +404,10 @@ onDoneWriteChan :: (MonadIO m, MonadLogger m)
                 -> UploadOpDoneReporter m
 -- {{{1
 onDoneWriteChan done_ch block_offset cpr = do
-  $(logDebugS) logSource $ fromString $
-    "block offset " ++ show block_offset
-                       ++ " chunk offset " ++ show (cprOffset cpr)
-                                              ++ " done."
+  $(logDebugS) logSource $
+    "block offset " <> tshow block_offset
+                       <> " chunk offset " <> tshow (cprOffset cpr)
+                                              <> " done."
   liftIO $ writeChan done_ch $ Just (block_offset, cpr)
 -- }}}1
 

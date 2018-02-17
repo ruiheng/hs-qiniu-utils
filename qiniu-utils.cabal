@@ -82,7 +82,6 @@ library
                      , exceptions
                      , transformers
                      , mtl
-                     , utf8-string
                      , monad-logger
                      , monad-control
                      , stm

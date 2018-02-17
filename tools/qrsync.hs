@@ -172,7 +172,7 @@ uploadOneFile sess fp = do
             Right (Right (UploadedFileInfo etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
                 putStrLn $ fromString $ "File '" <> fp <> "' uploaded to " <> show scope
-                putStrLn $ fromString $ "ETag: " <> unEtagHash etag
+                putStrLn $ "ETag: " <> unEtagHash etag
 -- }}}1
 
 
@@ -181,7 +181,7 @@ lookupStateFile :: (MonadIO m)
                 -> m (FilePath, Maybe RecoverUploadInfo)
 -- {{{1
 lookupStateFile etag = liftIO $ do
-    let state_fp = ".up_state." ++ (unEtagHash etag) ++ ".yml"
+    let state_fp = unpack $ ".up_state." <> unEtagHash etag <> ".yml"
     err_or_rui <- Y.decodeFileEither state_fp
     case err_or_rui of
         Left _ -> return (state_fp, Nothing)
@@ -268,8 +268,8 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
                 T.hPutStrLn stderr $ "Web Service Error: " <> tshow err
             Right (Right (UploadedFileInfo r_etag rrkey)) -> do
                 let scope = Scope bucket (Just rrkey)
-                putStrLn $ fromString $ "File '" ++ fp ++ "' uploaded to " ++ show scope
-                putStrLn $ fromString $ "ETag: " ++ unEtagHash r_etag
+                putStrLn $ fromString $ "File '" <> fp <> "' uploaded to " <> show scope
+                putStrLn $ "ETag: " <> unEtagHash r_etag
 
                 -- delete state file only server reports success
                 when cr_mode $ do

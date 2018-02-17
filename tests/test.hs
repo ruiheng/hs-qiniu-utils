@@ -31,7 +31,7 @@ testEscapeKey = do
     go "//a///b/c//"
     where
         go k = do
-            let path = keyToUrlPath (ResourceKey k)
+            let path = keyToUrlPath (ResourceKey $ fromString k)
             if unEscapeString path /= ('/' : k)
                 then do
                     putStrLn $ "key " <> tshow k
