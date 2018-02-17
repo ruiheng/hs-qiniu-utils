@@ -64,6 +64,7 @@ library
                        GeneralizedNewtypeDeriving
                        ExistentialQuantification
                        StandaloneDeriving
+                       RankNTypes
 
   -- other-extensions:    
   build-depends:       base >=4 && <5

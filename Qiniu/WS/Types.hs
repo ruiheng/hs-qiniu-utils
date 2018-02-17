@@ -4,6 +4,7 @@ module Qiniu.WS.Types where
 
 -- {{{1 imports
 import ClassyPrelude hiding (catch)
+import Control.Monad.Logger
 import qualified Data.ByteString.Lazy       as LB
 import Data.Aeson                           (Value, withObject, (.:)
                                             , FromJSON, parseJSON)
@@ -19,9 +20,12 @@ import Network.HTTP.Types                   (statusCode)
 
 import Network.Wreq hiding (statusCode)
 import qualified Network.Wreq as Wreq
+import qualified Network.Wreq.Session as WS
 import Control.Lens
 -- }}}1
 
+
+type QiniuRemoteCallMonad m = (MonadIO m, MonadThrow m, MonadLogger m, MonadReader WS.Session m)
 
 type WsRespBodyNormal = Map Text Value
 

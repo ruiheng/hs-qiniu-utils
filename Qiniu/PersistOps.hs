@@ -19,7 +19,6 @@ module Qiniu.PersistOps
 import ClassyPrelude hiding (try)
 import Control.Lens
 import Control.Monad.Catch                  (try)
-import Control.Monad.Logger
 import Control.Monad.Except                 (runExceptT, ExceptT(..))
 import Data.Aeson
 import qualified Data.ByteString.Char8      as C8
@@ -52,7 +51,8 @@ deriving instance PersistField PersistentId
 
 deriving instance PersistFieldSql PersistentId
 #endif
-type QiniuPfopMonad m = (MonadIO m, MonadCatch m, MonadLogger m, MonadReader WS.Session m)
+
+type QiniuPfopMonad m a = (QiniuRemoteCallMonad m) => ReaderT (SecretKey, AccessKey) m a
 
 -- | 音视频处理的格式参数
 type AvthumbFormat = Text
@@ -103,21 +103,19 @@ instance FromJSON PfopResp where
   parseJSON = withObject "PfopResp" $ \o -> PfopResp <$> o .: "persistentId"
 
 -- | 对已有的资源执行持久化数据处理
-persistOpsOnSaved :: QiniuPfopMonad m
-                  => SecretKey
-                  -> AccessKey
-                  -> [FopCmd]
+persistOpsOnSaved :: [FopCmd]
                   -> Entry          -- ^ input resource
                   -> Maybe Text     -- ^ notify url
                   -> Maybe Pipeline -- ^ pipeline
                   -> Bool
-                  -> m (WsResult PersistentId)
+                  -> QiniuPfopMonad m (WsResult PersistentId)
 -- {{{1
-persistOpsOnSaved secret_key access_key ops (bucket, rkey) m_notify_url m_pipeline forced = runExceptT $ do
-  sess <- ask
+persistOpsOnSaved ops (bucket, rkey) m_notify_url m_pipeline forced = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
   fmap (fmap unPfopResp) $ (asWsResponseNormal' =<<) $
-    ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data
+    ExceptT $ liftIO $ try $ WS.postWith opts sess url post_data
   where
     url_path = "/pfop/"
     fops_cmd = encodeFopCmdList ops :: Text
@@ -243,19 +241,17 @@ instance FromJSON PfopInfoItem where
 -- }}}1
 
 -- | 持久化处理状态查询
-persistOpsQuery :: QiniuPfopMonad m
-                => SecretKey
-                -> AccessKey
-                -> PersistentId
-                -> m (WsResult PersistOpInfo)
+persistOpsQuery :: PersistentId
+                -> QiniuPfopMonad m (WsResult PersistOpInfo)
 -- {{{1
-persistOpsQuery secret_key access_key pid = runExceptT $ do
-  sess <- ask
+persistOpsQuery pid = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   let opts0 = defaults & param "id" .~ [unPersistentId pid]
 
   opts <- liftIO $ applyAccessTokenGet secret_key access_key url_path opts0
   (asWsResponseNormal' =<<) $
-    ExceptT $ try $ liftIO $ WS.getWith opts sess url
+    ExceptT $ liftIO $ try $ WS.getWith opts sess url
   where
     url_path = "/status/get/prefop"
     url = persistOpApiUrl $ C8.unpack url_path

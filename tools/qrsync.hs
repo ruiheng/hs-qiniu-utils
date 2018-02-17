@@ -161,8 +161,8 @@ uploadOneFile sess fp = do
     let pp = pp0
     let upload_token = uploadToken skey akey pp
     let rkey = Nothing
-    ws_result <- (liftIO $ LB.readFile fp)
-                    >>= flip runReaderT (sess, region, upload_token) . (uploadOneShot rkey Nothing fp)
+    ws_result <- liftIO (LB.readFile fp)
+                    >>= flip runReaderT sess . flip runReaderT (region, upload_token) . (uploadOneShot rkey Nothing fp)
     liftIO $ do
         case ws_result of
             Left http_err -> do
@@ -248,14 +248,15 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
                     withAsync
                         (run_in_base $ S.runStateT (watch_ch state_fp) init_map)
                         $ \watcher -> do
-                            ws_result <- run_in_base $ runReaderT
+                            ws_result <- run_in_base $ flip runReaderT sess $
+                                                      runReaderT
                                                         (uploadByBlocksContinue
                                                             (nopOnWsCallError 3)
                                                             on_done
                                                             thread_num
                                                             last_rui
                                                             bs)
-                                                        (sess, region, upload_token)
+                                                        (region, upload_token)
 
                             writeChan done_ch Nothing >> wait watcher >> return ()
                             return ws_result

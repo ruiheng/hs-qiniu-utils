@@ -44,6 +44,7 @@ manageApiUrlF :: String -> String
 manageApiUrlF p = "http://" <> manageApiHostF <> p
 
 
+type QiniuManageMonad m a = (QiniuRemoteCallMonad m) => ReaderT (SecretKey, AccessKey) m a
 
 data EntryStat =
        EntryStat
@@ -56,16 +57,15 @@ data EntryStat =
 
 $(AT.deriveJSON AT.defaultOptions { AT.fieldLabelModifier = lowerFirst . drop 5 } ''EntryStat)
 
-stat :: (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
-     => SecretKey
-     -> AccessKey
-     -> Entry
-     -> m (WsResult EntryStat)
+stat :: MonadBaseControl IO m
+     => Entry
+     -> QiniuManageMonad m (WsResult EntryStat)
 -- {{{1
-stat secret_key access_key entry = runExceptT $ do
-  sess <- ask
+stat entry = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   opts <- liftIO $ applyAccessTokenGet secret_key access_key url_path defaults
-  resp <- ExceptT $ try $ liftIO $ WS.getWith opts sess url
+  resp <- ExceptT $ liftIO $ try $ WS.getWith opts sess url
   asWsResponseNormal' resp `Lifted.onException`
     ($logErrorS logSource $ "Cannot parse response body: " <> toStrict (decodeUtf8 (view responseBody resp)))
   where
@@ -73,33 +73,27 @@ stat secret_key access_key entry = runExceptT $ do
     url = manageApiUrl $ C8.unpack url_path
 -- }}}1
 
-statMaybe :: (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
-          => SecretKey
-          -> AccessKey
-          -> Entry
-          -> m (WsResult (Maybe EntryStat))
--- {{{1
-statMaybe secret_key access_key entry = do
-  fmap maybeDoesNotExists $ stat secret_key access_key entry
--- }}}1
+
+statMaybe :: MonadBaseControl IO m
+          => Entry
+          -> QiniuManageMonad m (WsResult (Maybe EntryStat))
+statMaybe = fmap maybeDoesNotExists . stat
 
 
 -- | Test whether an entry already exists and with the same etag
-alreadyExistsAndMatch :: (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m)
-                      => SecretKey
-                      -> AccessKey
-                      -> Entry
+alreadyExistsAndMatch :: MonadBaseControl IO m
+                      => Entry
                       -> m (Maybe EtagHash)  -- ^ 已有文件的hash. Nothing 代表不检查Etag
-                      -> m (WsResult Bool)
+                      -> QiniuManageMonad m (WsResult Bool)
 -- {{{1
-alreadyExistsAndMatch secret_key access_key entry get_local_etag = do
-  err_or_st <- fmap packError $ stat secret_key access_key entry
+alreadyExistsAndMatch entry get_local_etag = do
+  err_or_st <- fmap packError $ stat entry
   case err_or_st of
     Left err -> if isResourceDoesNotExistError err
                    then return $ Right $ Right False
                    else return $ either Left (Right . Left) err
     Right st -> do
-      m_etag <- get_local_etag
+      m_etag <- lift $ get_local_etag
       return $ Right $ Right $
         case m_etag of
           Nothing   -> True
@@ -109,15 +103,13 @@ alreadyExistsAndMatch secret_key access_key entry get_local_etag = do
 -- }}}1
 
 -- | Like alreadyExistsAndMatch, but consider any error as 'does not exist'
-alreadyExistsAndMatch' :: (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadLogger m, MonadBaseControl IO m)
-                       => SecretKey
-                       -> AccessKey
-                       -> Entry
+alreadyExistsAndMatch' :: (MonadBaseControl IO m)
+                       => Entry
                        -> m (Maybe EtagHash)  -- ^ 已有文件的hash
-                       -> m Bool
+                       -> QiniuManageMonad m Bool
 -- {{{1
-alreadyExistsAndMatch' secret_key access_key entry get_local_etag = do
-  err_or_exists <- fmap packError $ alreadyExistsAndMatch secret_key access_key entry get_local_etag
+alreadyExistsAndMatch' entry get_local_etag = do
+  err_or_exists <- fmap packError $ alreadyExistsAndMatch entry get_local_etag
   case err_or_exists of
     Right x -> return x
     Left err -> do
@@ -126,15 +118,13 @@ alreadyExistsAndMatch' secret_key access_key entry get_local_etag = do
 -- }}}1
 
 
-delete :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
-       => SecretKey
-       -> AccessKey
-       -> Entry -> m (WsResult ())
+delete :: Entry -> QiniuManageMonad m (WsResult ())
 -- {{{1
-delete secret_key access_key entry = runExceptT $ do
-  sess <- ask
+delete entry = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
+  asWsResponseEmpty =<< (ExceptT $ liftIO $ try $ WS.postWith opts sess url post_data)
   where
     url_path = "/delete/" <> encodedEntryUri entry
     url = manageApiUrl $ C8.unpack url_path
@@ -142,17 +132,15 @@ delete secret_key access_key entry = runExceptT $ do
 -- }}}1
 
 
-deleteAfterDays :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
-                => SecretKey
-                -> AccessKey
-                -> Entry
+deleteAfterDays :: Entry
                 -> Maybe Int  -- ^ Nothing: disable lifecyle
-                -> m (WsResult ())
+                -> QiniuManageMonad m (WsResult ())
 -- {{{1
-deleteAfterDays secret_key access_key entry m_days = runExceptT $ do
-  sess <- ask
+deleteAfterDays entry m_days = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
+  asWsResponseEmpty =<< (ExceptT $ liftIO $ try $ WS.postWith opts sess url post_data)
   where
     url_path = "/deleteAfterDays/" <> encodedEntryUri entry <> "/" <> fromString (show (fromMaybe 0 m_days))
     url = manageApiUrl $ C8.unpack url_path
@@ -160,17 +148,15 @@ deleteAfterDays secret_key access_key entry m_days = runExceptT $ do
 -- }}}1
 
 
-changeStoreType :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
-                => SecretKey
-                -> AccessKey
-                -> Entry
+changeStoreType :: Entry
                 -> FileStoreType
-                -> m (WsResult ())
+                -> QiniuManageMonad m (WsResult ())
 -- {{{1
-changeStoreType secret_key access_key entry st = runExceptT $ do
-  sess <- ask
+changeStoreType entry st = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
+  asWsResponseEmpty =<< (ExceptT $ liftIO $ try $ WS.postWith opts sess url post_data)
   where
     url_path = "/chtype/" <> encodedEntryUri entry <> "/type/" <> fromString (show (fromEnum st))
     url = manageApiUrl $ C8.unpack url_path
@@ -178,17 +164,15 @@ changeStoreType secret_key access_key entry st = runExceptT $ do
 -- }}}1
 
 
-copy :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
-     => SecretKey
-     -> AccessKey
-     -> Entry        -- ^ from
+copy :: Entry        -- ^ from
      -> Entry        -- ^ to
-     -> m (WsResult ())
+     -> QiniuManageMonad m (WsResult ())
 -- {{{1
-copy secret_key access_key entry_from entry_to = runExceptT $ do
-  sess <- ask
+copy entry_from entry_to = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
+  asWsResponseEmpty =<< (ExceptT $ liftIO $ try $ WS.postWith opts sess url post_data)
   where
     url_path = "/copy/" <> encodedEntryUri entry_from
                <> "/" <> encodedEntryUri entry_to
@@ -197,17 +181,15 @@ copy secret_key access_key entry_from entry_to = runExceptT $ do
 -- }}}1
 
 
-move :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
-     => SecretKey
-     -> AccessKey
-     -> Entry        -- ^ from
+move :: Entry        -- ^ from
      -> Entry        -- ^ to
-     -> m (WsResult ())
+     -> QiniuManageMonad m (WsResult ())
 -- {{{1
-move secret_key access_key entry_from entry_to = runExceptT $ do
-  sess <- ask
+move entry_from entry_to = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
+  asWsResponseEmpty =<< (ExceptT $ liftIO $ try $ WS.postWith opts sess url post_data)
   where
     url_path = "/move/" <> encodedEntryUri entry_from
                <> "/" <> encodedEntryUri entry_to
@@ -217,17 +199,15 @@ move secret_key access_key entry_from entry_to = runExceptT $ do
 
 
 -- | TODO: 未实现修改 meta_key 及 cond
-chgm :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
-     => SecretKey
-     -> AccessKey
-     -> Entry
+chgm :: Entry
      -> ByteString
-     -> m (WsResult ())
+     -> QiniuManageMonad m (WsResult ())
 -- {{{1
-chgm secret_key access_key entry mime = runExceptT $ do
-  sess <- ask
+chgm entry mime = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
-  asWsResponseEmpty =<< (ExceptT $ try $ liftIO $ WS.postWith opts sess url post_data)
+  asWsResponseEmpty =<< (ExceptT $ liftIO $ try $ WS.postWith opts sess url post_data)
   where
     url_path = "/chgm/" <> encodedEntryUri entry
                <> "/mime/" <> B64U.encode mime
@@ -260,17 +240,16 @@ data ListResult =
 $(AT.deriveJSON AT.defaultOptions { AT.fieldLabelModifier = lowerFirst . drop 2 } ''ListResult)
 
 
-list :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
-     => SecretKey
-     -> AccessKey
-     -> Bucket
+list :: Bucket
      -> Int          -- ^ limit
      -> Text       -- ^ delimiter
      -> Text       -- ^ prefix
      -> Text       -- ^ marker
-     -> m (WsResult ListResult)
+     -> QiniuManageMonad m (WsResult ListResult)
 -- {{{1
-list secret_key access_key bucket limit delimiter prefix marker =
+list bucket limit delimiter prefix marker = do
+  sess <- lift ask
+  (secret_key, access_key) <- ask
   runExceptT $ do
     let opts0 = defaults
                   & param "bucket" .~ [unBucket bucket]
@@ -279,31 +258,28 @@ list secret_key access_key bucket limit delimiter prefix marker =
                   & param "delimiter" .~ [delimiter]
                   & param "marker" .~ [marker]
 
-    sess <- ask
     opts <- liftIO $ applyAccessTokenGet secret_key access_key url_path opts0
-    asWsResponseNormal' =<< (ExceptT $ try $ liftIO $ WS.getWith opts sess url)
+    asWsResponseNormal' =<< (ExceptT $ liftIO $ try $ WS.getWith opts sess url)
   where
     url_path = "/list"
     url = manageApiUrlF $ C8.unpack url_path
 -- }}}1
 
 
-listSource :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
-           => SecretKey
-           -> AccessKey
-           -> Bucket
+listSource :: QiniuRemoteCallMonad m
+           => Bucket
            -> Int          -- ^ limit
            -> Text       -- ^ delimiter
            -> Text       -- ^ prefix
-           -> Source m ListResult
+           -> Source (ReaderT (SecretKey, AccessKey) m) ListResult
             -- ^ may throw HttpException or WsError
 -- {{{1
-listSource secret_key access_key bucket limit delimiter prefix = do
+listSource bucket limit delimiter prefix = do
   go ""
 
   where
     go marker = do
-      lr <- list secret_key access_key bucket limit delimiter prefix marker
+      lr <- lift (list bucket limit delimiter prefix marker)
             >>= either (either throwM throwM) return . packError
       yield lr
       let new_marker = fromMaybe "" $ lrMarker lr
@@ -313,17 +289,15 @@ listSource secret_key access_key bucket limit delimiter prefix = do
 -- }}}1
 
 
-fetch :: (MonadIO m, MonadReader WS.Session m, MonadCatch m)
-      => SecretKey
-      -> AccessKey
-      -> Text         -- ^ from url
+fetch :: Text         -- ^ from url
       -> Scope        -- ^ to
-      -> m (WsResult UploadedFileInfo)
+      -> QiniuManageMonad m (WsResult UploadedFileInfo)
 -- {{{1
-fetch secret_key access_key url_from scope_to = runExceptT $ do
-  sess <- ask
+fetch url_from scope_to = runExceptT $ do
+  sess <- lift $ lift ask
+  (secret_key, access_key) <- ask
   opts <- liftIO $ applyAccessTokenGet secret_key access_key url_path defaults
-  asWsResponseNormal' =<< (ExceptT $ try $ liftIO $ WS.getWith opts sess url)
+  asWsResponseNormal' =<< (ExceptT $ liftIO $ try $ WS.getWith opts sess url)
   where
     url_path = "/fetch/" <> B64U.encode (encodeUtf8 url_from)
                <> "/to/" <> encodedScopeUri scope_to

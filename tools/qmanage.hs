@@ -204,29 +204,27 @@ printResult f ws_result = do
             f x
 
 
-processCmd ::
-    (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
-    SecretKey -> AccessKey -> Command -> m ()
-processCmd secret_key access_key (Stat entry) = do
-    (stat secret_key access_key entry) >>= printResult f
+processCmd :: (MonadBaseControl IO m, MonadCatch m) => Command -> QiniuManageMonad m ()
+processCmd (Stat entry) = do
+    (stat entry) >>= printResult f
     where
         f = liftIO . print
-processCmd secret_key access_key (Delete entry) = do
-    (delete secret_key access_key entry) >>= printResult (const $ return ())
-processCmd secret_key access_key (Copy entry_from entry_to) = do
-    (copy secret_key access_key entry_from entry_to) >>= printResult (const $ return ())
-processCmd secret_key access_key (Move entry_from entry_to) = do
-    (move secret_key access_key entry_from entry_to) >>= printResult (const $ return ())
-processCmd secret_key access_key (ChangeMime entry mime) = do
-    (chgm secret_key access_key entry mime) >>= printResult (const $ return ())
-processCmd secret_key access_key (List bucket prefix) = do
-    (tryWsResult $ listSource secret_key access_key bucket 1 "/" prefix $$ CL.consume)
+processCmd (Delete entry) = do
+    delete entry >>= printResult (const $ return ())
+processCmd (Copy entry_from entry_to) = do
+    copy entry_from entry_to >>= printResult (const $ return ())
+processCmd (Move entry_from entry_to) = do
+    move entry_from entry_to >>= printResult (const $ return ())
+processCmd (ChangeMime entry mime) = do
+    chgm entry mime >>= printResult (const $ return ())
+processCmd (List bucket prefix) = do
+    (tryWsResult $ listSource bucket 1 "/" prefix $$ CL.consume)
         >>= printResult f . unpackError
     where
         f s = liftIO $ do
                 print s
-processCmd secret_key access_key (Fetch url scope) = do
-    (fetch secret_key access_key url scope) >>= printResult (const $ return ())
+processCmd (Fetch url scope) = do
+    fetch url scope >>= printResult (const $ return ())
 
 
 interactive ::
@@ -255,7 +253,7 @@ interactive secret_key access_key = do
                                         "cannot parse command: " <> tshow err
                         Right Nothing -> return ()
 
-                        Right (Just cmd) -> processCmd secret_key access_key cmd
+                        Right (Just cmd) -> flip runReaderT (secret_key, access_key) (processCmd cmd)
                     go
 
 
@@ -269,7 +267,7 @@ start m_cmds = do
     lift $ do
         case m_cmds of
             Nothing -> interactive secret_key access_key
-            Just cmds -> mapM_ (processCmd secret_key access_key) cmds
+            Just cmds -> flip runReaderT (secret_key, access_key) (mapM_ processCmd cmds)
 
 
 start' :: ManageOptions -> Maybe [Command] -> IO ()
