@@ -6,7 +6,7 @@
 module Qiniu.Manage where
 
 -- {{{1 imports
-import           ClassyPrelude hiding (try)
+import           ClassyPrelude hiding (try, delete)
 import qualified Control.Exception.Lifted as Lifted
 import           Control.Lens (view, (&), (.~))
 import           Control.Monad.Logger
@@ -77,7 +77,7 @@ stat entry = runExceptT $ do
 statMaybe :: MonadBaseControl IO m
           => Entry
           -> QiniuManageMonad m (WsResult (Maybe EntryStat))
-statMaybe = fmap maybeDoesNotExists . stat
+statMaybe = fmap maybeDoesNotExist . stat
 
 
 -- | Test whether an entry already exists and with the same etag
@@ -132,6 +132,10 @@ delete entry = runExceptT $ do
 -- }}}1
 
 
+deleteMaybe :: Entry -> QiniuManageMonad m (WsResult (Maybe ()))
+deleteMaybe = fmap maybeDoesNotExist . delete
+
+
 deleteAfterDays :: Entry
                 -> Maybe Int  -- ^ Nothing: disable lifecyle
                 -> QiniuManageMonad m (WsResult ())
@@ -146,6 +150,11 @@ deleteAfterDays entry m_days = runExceptT $ do
     url = manageApiUrl $ C8.unpack url_path
     post_data = mempty :: ByteString
 -- }}}1
+
+deleteAfterDaysMaybe :: Entry
+                     -> Maybe Int  -- ^ Nothing: disable lifecyle
+                     -> QiniuManageMonad m (WsResult (Maybe ()))
+deleteAfterDaysMaybe = (fmap maybeDoesNotExist .) . deleteAfterDays
 
 
 changeStoreType :: Entry
@@ -162,6 +171,9 @@ changeStoreType entry st = runExceptT $ do
     url = manageApiUrl $ C8.unpack url_path
     post_data = mempty :: ByteString
 -- }}}1
+
+changeStoreTypeMaybe :: Entry -> FileStoreType -> QiniuManageMonad m (WsResult (Maybe ()))
+changeStoreTypeMaybe = (fmap maybeDoesNotExist .) . changeStoreType
 
 
 copy :: Entry        -- ^ from
@@ -181,6 +193,15 @@ copy entry_from entry_to = runExceptT $ do
 -- }}}1
 
 
+copyMaybe :: Entry        -- ^ from
+          -> Entry        -- ^ to
+          -> QiniuManageMonad m (WsResult (Maybe (Maybe ())))
+          -- ^ Nothing: source does not exist
+          --   Just Nothing: dest does not exist
+          --   Just (Just ()): success
+copyMaybe = (fmap (maybeDoesNotExist . maybeAlreadyExists) .) . copy
+
+
 move :: Entry        -- ^ from
      -> Entry        -- ^ to
      -> QiniuManageMonad m (WsResult ())
@@ -196,6 +217,14 @@ move entry_from entry_to = runExceptT $ do
     url = manageApiUrl $ C8.unpack url_path
     post_data = mempty :: ByteString
 -- }}}1
+
+moveMaybe :: Entry        -- ^ from
+          -> Entry        -- ^ to
+          -> QiniuManageMonad m (WsResult (Maybe (Maybe ())))
+          -- ^ Nothing: source does not exist
+          --   Just Nothing: dest does not exist
+          --   Just (Just ()): success
+moveMaybe = (fmap (maybeDoesNotExist . maybeAlreadyExists) .) . move
 
 
 -- | TODO: 未实现修改 meta_key 及 cond
@@ -214,6 +243,9 @@ chgm entry mime = runExceptT $ do
     url = manageApiUrl $ C8.unpack url_path
     post_data = mempty :: ByteString
 -- }}}1
+
+chgmMaybe :: Entry -> ByteString -> QiniuManageMonad m (WsResult (Maybe ()))
+chgmMaybe = (fmap maybeDoesNotExist .) . chgm
 
 
 data ListItem =
