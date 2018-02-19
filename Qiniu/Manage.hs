@@ -42,22 +42,30 @@ manageApiHost = "rs.qiniu.com"
 manageApiHostF :: IsString a => a
 manageApiHostF = "rsf.qbox.me"
 
+manageApiHostApi :: IsString a => a
+manageApiHostApi = "api.qiniu.com"
+
 manageApiUrl :: String -> String
 manageApiUrl p = "http://" <> manageApiHost <> p
 
 manageApiUrlF :: String -> String
 manageApiUrlF p = "http://" <> manageApiHostF <> p
 
+manageApiUrlApi :: String -> String
+manageApiUrlApi p = "http://" <> manageApiHostApi <> p
+
 
 type QiniuManageMonad m a = (QiniuRemoteCallMonad m) => ReaderT (SecretKey, AccessKey) m a
 
 
 -- | 描述不同管理操作指令的实现区别
+-- 每一增加一新的操作，需增加一种类型，并实现此 class
 class ( AsWsResponse (ObjectManageOpResult a)
       , Postable (ObjectManageOpPostable a)
       )
   => ObjectManageOp a
  where
+-- {{{1
   -- 指令调用后的返回报文的类型
   type ObjectManageOpResult a :: *
 
@@ -83,6 +91,10 @@ class ( AsWsResponse (ObjectManageOpResult a)
   default objManageApiPostable :: (Monoid (ObjectManageOpPostable a))
                                => a -> Maybe (ObjectManageOpPostable a)
   objManageApiPostable _ = Just mempty
+-- }}}1
+
+
+data SomeObjectManageOp = forall o. ObjectManageOp o => SomeObjectManageOp o
 
 
 -- | chstatus 接口用的状态
@@ -275,6 +287,50 @@ instance ObjectManageOp ObjFetch where
 -- }}}1
 
 
+data BatchOp = BatchOp [SomeObjectManageOp]
+
+instance ObjectManageOp BatchOp where
+-- {{{1
+  type ObjectManageOpResult BatchOp = [WsRespBody]
+
+  objManageOpUrlPath _ = "/batch"
+
+  objManageApiPostable (BatchOp some_ops) =
+    Just $ intercalate "&" $ map op_path some_ops
+    where
+      op_path (SomeObjectManageOp op) = "op=" <> objManageOpUrlPath op
+-- }}}1
+
+
+data BucketList = BucketList
+
+instance ObjectManageOp BucketList where
+-- {{{1
+  type ObjectManageOpResult BucketList = [Text]
+
+  objManageOpUrlPath _ = "/buckets"
+
+  objManageApiPostable _ = Nothing
+-- }}}1
+
+
+data BucketDomainList = BucketDomainList Bucket
+
+instance ObjectManageOp BucketDomainList where
+-- {{{1
+  type ObjectManageOpResult BucketDomainList = [Text]
+
+  objManageOpUrlPath _ = "/v6/domain/list"
+
+  objManageOpOptions (BucketDomainList bucket) =
+    defaults & param "tbl" .~ [ unBucket bucket ]
+
+  objManageApiPostable _ = Nothing
+
+  objManageApiUrl _ = manageApiUrlApi
+-- }}}1
+
+
 manageOpRemoteCall :: (ObjectManageOp o)
                    => o
                    -> QiniuManageMonad m (WsResult (ObjectManageOpResult o))
@@ -457,6 +513,18 @@ fetch :: Text         -- ^ from url
       -> QiniuManageMonad m (WsResult UploadedFileInfo)
 fetch from_url to_scope = manageOpRemoteCall $ ObjFetch from_url to_scope
 
+
+batch :: [SomeObjectManageOp]
+      -> QiniuManageMonad m (WsResult [WsRespBody])
+batch some_ops = manageOpRemoteCall $ BatchOp some_ops
+
+
+buckets :: QiniuManageMonad m (WsResult [Text])
+buckets = manageOpRemoteCall BucketList
+
+
+bucketDomains :: Bucket -> QiniuManageMonad m (WsResult [Text])
+bucketDomains = manageOpRemoteCall . BucketDomainList
 
 
 -- vim: set foldmethod=marker:
