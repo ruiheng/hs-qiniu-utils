@@ -63,10 +63,10 @@ data WebPlayerOptions =
          , wpOptsAutoplay    :: Maybe Bool
          , wpOptsPreload     :: Maybe WebPlayerPreload
          , wpOptsControls    :: Maybe Bool
-         , wpOptsPoster      :: Maybe String
+         , wpOptsPoster      :: Maybe Text
          , wpOptsWidth       :: Maybe Int
          , wpOptsHeight      :: Maybe Int
-         , wpOptsUrl         :: Maybe String
+         , wpOptsUrl         :: Maybe Text
          , wpOptsType        :: Maybe WebPlayerVideoType
          , wpOptsLoop        :: Maybe Bool
          , wpOptsStretching  :: Maybe WebPlayerStretch
