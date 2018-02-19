@@ -8,7 +8,6 @@ import Data.Scientific                      (floatingOrInteger)
 import Data.Aeson                           ( withScientific
                                             , FromJSON, parseJSON
                                             , ToJSON, toJSON
-                                            , Value
                                             )
 import Data.Time.Clock.POSIX                (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 -- }}}1
