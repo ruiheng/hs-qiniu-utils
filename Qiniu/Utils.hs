@@ -27,6 +27,12 @@ lowerFirst s =
 newtype ServerTimeStamp = ServerTimeStamp { unServerTimeStamp :: UTCTime }
                         deriving (Eq, Ord)
 
+intServerTimeStamp :: ServerTimeStamp -> Int64
+intServerTimeStamp = (* (1000 * 1000 * 10))
+                      . round
+                      . utcTimeToPOSIXSeconds
+                      . unServerTimeStamp
+
 -- {{{1 instances
 instance Show ServerTimeStamp where
     show (ServerTimeStamp x) = "ServerTimeStamp:" ++ show x
@@ -38,10 +44,7 @@ instance FromJSON ServerTimeStamp where
                 / (1000 * 1000 * 10)
 
 instance ToJSON ServerTimeStamp where
-    toJSON = (toJSON :: Double -> Value)
-                . realToFrac
-                . utcTimeToPOSIXSeconds
-                . unServerTimeStamp
+    toJSON = toJSON . intServerTimeStamp
 -- }}}1
 
 
