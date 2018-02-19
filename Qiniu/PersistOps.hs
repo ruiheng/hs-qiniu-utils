@@ -113,7 +113,7 @@ persistOpsOnSaved :: [FopCmd]
 persistOpsOnSaved ops (bucket, rkey) m_notify_url m_pipeline forced = runExceptT $ do
   sess <- lift $ lift ask
   (secret_key, access_key) <- ask
-  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path post_data defaults
+  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path (Just post_data) defaults
   fmap (fmap unPfopResp) $ (asWsResponseNormal' =<<) $
     ExceptT $ liftIO $ try $ WS.postWith opts sess url post_data
   where

@@ -216,9 +216,9 @@ processCmd (Copy entry_from entry_to) = do
 processCmd (Move entry_from entry_to) = do
     move entry_from entry_to >>= printResult (const $ return ())
 processCmd (ChangeMime entry mime) = do
-    chgm entry mime >>= printResult (const $ return ())
+    chgm entry (Just mime) mempty mempty >>= printResult (const $ return ())
 processCmd (List bucket prefix) = do
-    (tryWsResult $ listSource bucket 1 "/" prefix $$ CL.consume)
+  (tryWsResult $ listSource bucket (Just 1) (Just "/") (Just prefix) $$ CL.consume)
         >>= printResult f . unpackError
     where
         f s = liftIO $ do

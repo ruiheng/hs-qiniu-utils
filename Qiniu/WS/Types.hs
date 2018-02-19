@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Qiniu.WS.Types where
 
 -- {{{1 imports
@@ -25,7 +27,7 @@ import Control.Lens
 -- }}}1
 
 
-type QiniuRemoteCallMonad m = (MonadIO m, MonadThrow m, MonadLogger m, MonadReader WS.Session m)
+type QiniuRemoteCallMonad m = (MonadIO m, MonadBaseControl IO m, MonadThrow m, MonadLogger m, MonadReader WS.Session m)
 
 type WsRespBodyNormal = Map Text Value
 
@@ -106,6 +108,18 @@ asWsResponseNormal' rb = runExceptT $ do
         A.Error err -> throwM $ JSONError err
         A.Success x -> return x
 -- }}}1
+
+
+class AsWsResponse r where
+  asWsResponseResult :: (MonadThrow m)
+                     => Response LB.ByteString
+                     -> m (Either WsError r)
+
+instance AsWsResponse () where
+  asWsResponseResult = asWsResponseEmpty
+
+instance {-# OVERLAPPABLE #-} FromJSON a => AsWsResponse a where
+  asWsResponseResult = asWsResponseNormal'
 
 respJsonGetByKey :: (MonadThrow m, FromJSON a)
                  => Response WsRespBodyNormal

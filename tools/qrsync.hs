@@ -145,7 +145,7 @@ parseOptions = RsyncOptions <$>
 parseFileNames :: Parser [FilePath]
 parseFileNames = fmap ordNub $ some $ argument str $ metavar "FILES..."
 
-uploadOneFile :: (MonadIO m, MonadThrow m, MonadLogger m)
+uploadOneFile :: (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m)
               => WS.Session
               -> FilePath
               -> ReaderT RsyncOptions m ()

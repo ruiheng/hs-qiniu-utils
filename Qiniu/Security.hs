@@ -163,15 +163,19 @@ applyAccessTokenPost :: Postable a
                      => SecretKey
                      -> AccessKey
                      -> ByteString
-                     -> a
+                     -> Maybe a
                      -> W.Options
                      -> IO W.Options
 -- {{{1
-applyAccessTokenPost secret_key access_key url_path p opts = do
-  req <- postPayload p init_req
+applyAccessTokenPost secret_key access_key url_path m_p opts = do
+  req <- mk_req init_req
   token <- mkAccessTokenFromReq secret_key access_key req
   return $ setAccessTokenHeaderOptions token opts
   where
+    mk_req = case m_p of
+               Just p -> postPayload p
+               Nothing -> postPayload (mempty :: ByteString)
+
     qs_params = opts ^. W.params
     init_req = defaultRequest { HC.method = "POST"
                               , HC.queryString = toStrict $ BB.toLazyByteString $ renderQueryText True $ map (second Just) qs_params
