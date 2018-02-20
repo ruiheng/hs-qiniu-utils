@@ -3,6 +3,7 @@
 module Qiniu.Region 
   ( Region(..)
   , Action(..)
+  , regionNickname
   , getBaseUrl
   ) where
 
@@ -23,12 +24,12 @@ data Action = ServerUpload | ClientUpload | Download
               deriving (Eq, Ord, Enum, Bounded, Show, Read)
 
 
-nickname :: IsString a => Region -> Maybe a
-nickname EastChina    = Nothing
-nickname NorthChina   = Just "z1"
-nickname SouthChina   = Just "z2"
-nickname NorthAmerica = Just "na0"
-nickname Singapore    = Just "as0"
+regionNickname :: IsString a => Region -> Maybe a
+regionNickname EastChina    = Nothing
+regionNickname NorthChina   = Just "z1"
+regionNickname SouthChina   = Just "z2"
+regionNickname NorthAmerica = Just "na0"
+regionNickname Singapore    = Just "as0"
 
 
 basehost :: (Semigroup a, IsString a) => Action -> Bool -> (a, a)
@@ -53,7 +54,7 @@ getBaseUrl :: (IsString a, Semigroup a)
            -> Bool   -- ^ use https or not
            -> a
 getBaseUrl region = (addRegion .) . basehost
-  where addRegion (prefix, suffix) = case nickname region of
+  where addRegion (prefix, suffix) = case regionNickname region of
                                        Just nn -> prefix <> "-" <> nn <> suffix
                                        Nothing -> prefix <> suffix
 
