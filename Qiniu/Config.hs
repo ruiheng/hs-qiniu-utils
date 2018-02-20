@@ -74,12 +74,12 @@ instance FromJSON QiniuDualConfig where
                                         o .: "public-bucket" >>= check_non_empty_str)
             <*> ( fmap nullToMaybe $ o .:? "public-domain" )
             <*> ( o .:? "public-ssl-url" .!= False )
-            <*> o .: "public-region"
+            <*> (o .: "public-region" <|> o .: "region")
             <*> (fmap (Bucket . fromString) $
                                         o .: "private-bucket" >>= check_non_empty_str)
             <*> ( fmap nullToMaybe $ o .:? "private-domain" )
             <*> ( o .:? "private-ssl-url" .!= False )
-            <*> o .: "private-region"
+            <*> (o .: "private-region" <|> o .: "region")
             <*> ( fmap (fromMaybe "") $ o .:? "path-prefix" )
         where
             check_non_empty_str s = if null s then mzero else return s
