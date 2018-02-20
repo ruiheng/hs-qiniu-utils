@@ -213,7 +213,7 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
 
     bs <- liftIO $ LB.readFile fp
     let etag = hetagL bs
-        empty_rui = RecoverUploadInfo [] block_size chunk_size rkey m_mime
+        empty_rui = RecoverUploadInfo [] block_size chunk_size (Just fp) rkey m_mime
     (state_fp, m_rui) <- if cr_mode
                             then lookupStateFile etag
                             else return (".useless.yml", Nothing)
@@ -228,7 +228,7 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
                                 (offset `div` block_size) cpr
                                 cpr_map
             let rui = cprMapToRecoverUploadInfo
-                        block_size chunk_size rkey m_mime new_cpr_map
+                        block_size chunk_size (Just fp) rkey m_mime new_cpr_map
             when cr_mode $ do
                 liftIO $ B.writeFile state_file $ Y.encode rui
             let done_len = doneBytesLength $ map snd $ mapToList new_cpr_map

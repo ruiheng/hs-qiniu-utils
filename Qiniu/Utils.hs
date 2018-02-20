@@ -2,6 +2,8 @@ module Qiniu.Utils where
 
 -- {{{1 imports
 import ClassyPrelude
+import qualified Data.ByteString.Base64.URL as B64U
+import qualified Data.ByteString.Char8 as C8
 
 import qualified Data.Char                  as Char
 import Data.Scientific                      (floatingOrInteger)
@@ -47,5 +49,22 @@ instance ToJSON ServerTimeStamp where
 -- }}}1
 
 
+base64UrlEncode :: IsString s => ByteString -> s
+base64UrlEncode = fromString . C8.unpack . B64U.encode
+
+base64UrlEncodeT :: IsString s => Text -> s
+base64UrlEncodeT = base64UrlEncode . encodeUtf8
+
+base64UrlEncodeS :: IsString s => String -> s
+base64UrlEncodeS = base64UrlEncode . encodeUtf8 . pack
+
+
+isNothingOrNull :: MonoFoldable a => Maybe a -> Bool
+isNothingOrNull = fromMaybe True . fmap null
+
+
+maybeNonNull :: MonoFoldable a => Maybe a -> Maybe a
+maybeNonNull (Just x) = if null x then Nothing else Just x
+maybeNonNull Nothing = Nothing
 
 -- vim: set foldmethod=marker:

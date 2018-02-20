@@ -11,10 +11,8 @@ module Qiniu.Upload where
 import           ClassyPrelude hiding (try, finally)
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Aeson.TH as AT
-import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map as Map
-import           Data.Text.Encoding         (decodeLatin1)
 import           Control.Monad.Trans.Except (runExceptT, ExceptT(..))
 import           Control.Monad.Catch (try, finally)
 import           Control.Monad.Logger
@@ -35,6 +33,7 @@ import           Control.Lens hiding ((.=))
 import           Qiniu.Region
 import           Qiniu.Security
 import           Qiniu.Types
+import           Qiniu.Utils
 import           Qiniu.WS.Types
 -- }}}1
 
@@ -54,7 +53,7 @@ uploadOneShot m_key m_mime fp' bs = runExceptT $ do
 
   let host = getBaseUrl region ServerUpload False
 
-  -- 七牛要求一定要提供一个文件名，如果没名会出错 XXX: 但分片上传时没看到哪里需要这个文件名参数
+  -- 七牛要求一定要提供一个文件名，如果没名会出错
   let fp = if null fp'
              then "<unnamed>"
              else fp
@@ -175,13 +174,14 @@ uploadOneBlock on_err on_done chunk_size bs = runExceptT $ do
 
 
 uploadMkfile :: Int64                   -- ^ file size
+             -> Maybe FilePath          -- ^ optional: original file name
              -> Maybe ResourceKey
              -> Maybe ByteString     -- ^ optionally specify a mime type
              -> Text               -- ^ last host
              -> [Text]             -- ^ list of ctx
              -> QiniuUploadMonad m (WsResult UploadedFileInfo)
 -- {{{1
-uploadMkfile file_size m_key m_mime host ctx_list = runExceptT $ do
+uploadMkfile file_size m_fp m_key m_mime host ctx_list = runExceptT $ do
   sess <- lift $ lift ask
   (_region, upload_token) <- ask
   let opts = defaults & header "Content-Type" .~ ["application/octet-stream"]
@@ -191,13 +191,10 @@ uploadMkfile file_size m_key m_mime host ctx_list = runExceptT $ do
             fixHost host <>
             "/mkfile/" <>
             tshow file_size <>
-            (fromMaybe "" $ ("/key/" <>)
-                            . decodeLatin1
-                              . B64U.encode
-                                . encodeUtf8
-                                  . unResourceKey
-                            <$> m_key) <>
-            (fromString $ fromMaybe "" $ flip fmap m_mime $ ("/mimeType/" <>) . C8.unpack . B64U.encode)
+            (fromMaybe mempty $ ("/key/" <>) . base64UrlEncodeT <$> maybeNonNull (unResourceKey <$> m_key)) <>
+            (fromMaybe mempty $ ("/mimeType/" <>) . base64UrlEncode <$> maybeNonNull m_mime) <>
+            (fromMaybe mempty $ ("/fname/" <>) . base64UrlEncodeS <$> maybeNonNull m_fp)
+            -- 指定 fname 的这段逻辑，文档上没说，但 js-sdk 就是这样做的
 
   --   $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
   rb <- ExceptT $ liftIO $ try $ WS.postWith opts sess url $
@@ -211,12 +208,13 @@ uploadByBlocks :: forall m. ()
                -> UploadOpDoneReporter m
                -> Int64            -- ^ block size
                -> Int64            -- ^ chunk size
+               -> Maybe FilePath
                -> Maybe ResourceKey
                -> Maybe ByteString     -- ^ optionally specify a mime type
                -> LB.ByteString    -- ^ content of the file to uploaded
                -> QiniuUploadMonad m (WsResultP UploadedFileInfo)
 -- {{{1
-uploadByBlocks on_err on_done block_size chunk_size m_key m_mime bs = runExceptT $ do
+uploadByBlocks on_err on_done block_size chunk_size m_fp m_key m_mime bs = runExceptT $ do
   let go cpr_list offset bs_to_upload = do
         let (bs1, bs2) = LB.splitAt block_size bs_to_upload
         cpr <- ExceptT $ uploadOneBlock on_err (on_done offset) chunk_size bs1
@@ -229,6 +227,7 @@ uploadByBlocks on_err on_done block_size chunk_size m_key m_mime bs = runExceptT
   ExceptT $ retryWsCall "uploadMkfile" on_err' $
     liftM packError $ uploadMkfile
                         (LB.length bs)
+                        m_fp
                         m_key
                         m_mime
                         (cprHost $
@@ -247,6 +246,7 @@ data RecoverUploadInfo =
          -- size 说明上传已完成
          , ruiBlockSize :: Int64
          , ruiChunkSize :: Int64
+         , ruiFileName :: Maybe FilePath
          , ruiResourceKey :: Maybe ResourceKey
          , ruiMimeType :: Maybe ByteString
          }
@@ -258,6 +258,7 @@ instance FromJSON RecoverUploadInfo where
       RecoverUploadInfo <$> (obj .: "last-cpr-list")
                         <*> (obj .: "block-size")
                         <*> (obj .: "chunk-size")
+                        <*> (obj .:? "file-name")
                         <*> (obj .:? "resource-key")
                         <*> (fmap fromString <$> obj .:? "mime-type")
 
@@ -266,6 +267,7 @@ instance ToJSON RecoverUploadInfo where
                [ "last-cpr-list" .= ruiBlockLastCPR x
                , "block-size" .= ruiBlockSize x
                , "chunk-size" .= ruiChunkSize x
+               , "file-name" .= ruiFileName x
                , "resource-key" .= ruiResourceKey x
                , "mime-type" .= fmap C8.unpack (ruiMimeType x)
                ]
@@ -274,13 +276,14 @@ instance ToJSON RecoverUploadInfo where
 
 cprMapToRecoverUploadInfo :: Int64
                           -> Int64
+                          -> Maybe FilePath
                           -> Maybe ResourceKey
                           -> Maybe ByteString     -- ^ optionally specify a mime type
                           -> Map Int64 ChunkPutResult
                           -> RecoverUploadInfo
 -- {{{1
-cprMapToRecoverUploadInfo block_size chunk_size m_key m_mime cpr_map =
-  RecoverUploadInfo cpr_list block_size chunk_size m_key m_mime
+cprMapToRecoverUploadInfo block_size chunk_size m_fp m_key m_mime cpr_map =
+  RecoverUploadInfo cpr_list block_size chunk_size m_fp m_key m_mime
   where
     cpr_list = if null cpr_map
                  then []
@@ -310,6 +313,7 @@ uploadByBlocksContinue :: forall m. (MonadBaseControl IO m)
 uploadByBlocksContinue on_err on_done thread_num0 rui bs = runExceptT $ do
   let block_size = ruiBlockSize rui
       chunk_size = ruiChunkSize rui
+      m_fp = ruiFileName rui
       m_key = ruiResourceKey rui
       m_mime = ruiMimeType rui
       expected_blk_num = fromIntegral $ (LB.length bs + block_size - 1) `div` block_size
@@ -324,6 +328,7 @@ uploadByBlocksContinue on_err on_done thread_num0 rui bs = runExceptT $ do
   ExceptT $ retryWsCall "uploadMkfile" on_err' $
     liftM packError $ uploadMkfile
                         (LB.length bs)
+                        m_fp
                         m_key
                         m_mime
                         (cprHost $ fromMaybe (error "cprs should never be empty")
