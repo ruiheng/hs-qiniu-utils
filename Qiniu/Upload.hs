@@ -52,7 +52,7 @@ uploadOneShot m_key m_mime fp' bs = runExceptT $ do
   sess <- lift $ lift ask
   (region, upload_token) <- ask
 
-  let host = getHost region ServerUpload False
+  let host = getBaseUrl region ServerUpload False
 
   -- 七牛要求一定要提供一个文件名，如果没名会出错 XXX: 但分片上传时没看到哪里需要这个文件名参数
   let fp = if null fp'
@@ -110,7 +110,7 @@ uploadMkblk block_size bs = runExceptT $ do
   let opts = defaults & header "Content-Type" .~ ["application/octet-stream"]
              & header "Authorization" .~
              [encodeUtf8 $ "UpToken " <> unUploadToken upload_token]
-      host = getHost region ServerUpload False
+      host = getBaseUrl region ServerUpload False
       url = host <> "/mkblk/" <> show block_size
 
   --   $(logDebugS) logSource $ T.pack $ "POSTing to: " <> url
