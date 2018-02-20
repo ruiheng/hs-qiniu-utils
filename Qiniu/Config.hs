@@ -17,6 +17,7 @@ data QiniuConfig =
          , qiniuConfigBucket     :: Bucket
          , qiniuConfigDomain     :: Maybe Text
          , qiniuConfigSslUrl     :: Bool
+         , qiniuConfigRegion     :: Region
          , qiniuConfigPathPrefix :: Text
          -- ^ 把 resource key 当路径用时，总是加上这段路径前缀
          }
@@ -34,6 +35,7 @@ instance FromJSON QiniuConfig where
                                         o .: "bucket" >>= check_non_empty_str)
             <*> ( fmap nullToMaybe $ o .:? "domain" )
             <*> ( o .:? "ssl-url" .!= False)
+            <*> o .: "region"
             <*> ( fmap (fromMaybe "") $ o .:? "path-prefix" )
         where
             check_non_empty_str s = if null s then mzero else return s
@@ -51,11 +53,12 @@ data QiniuDualConfig =
          , qcDualPublicBucket  :: Bucket
          , qcDualPublicDomain  :: Maybe Text
          , qcDualPublicSslUrl  :: Bool
+         , qcDualPublicRegion  :: Region
          , qcDualPrivateBucket :: Bucket
          , qcDualPrivateDomain :: Maybe Text
          , qcDualPrivateSslUrl :: Bool
+         , qcDualPrivateRegion :: Region
          , qcDualPathPrefix    :: Text
-         , qcDualRegion        :: Region
          }
   deriving (Eq, Show)
 
@@ -71,12 +74,13 @@ instance FromJSON QiniuDualConfig where
                                         o .: "public-bucket" >>= check_non_empty_str)
             <*> ( fmap nullToMaybe $ o .:? "public-domain" )
             <*> ( o .:? "public-ssl-url" .!= False )
+            <*> o .: "public-region"
             <*> (fmap (Bucket . fromString) $
                                         o .: "private-bucket" >>= check_non_empty_str)
             <*> ( fmap nullToMaybe $ o .:? "private-domain" )
             <*> ( o .:? "private-ssl-url" .!= False )
+            <*> o .: "private-region"
             <*> ( fmap (fromMaybe "") $ o .:? "path-prefix" )
-            <*> ( fmap (fromMaybe EastChina) $ o .:? "region" )
         where
             check_non_empty_str s = if null s then mzero else return s
 
@@ -93,6 +97,7 @@ pubOfQiniuDualConfig qc = QiniuConfig
                             (qcDualPublicBucket qc)
                             (qcDualPublicDomain qc)
                             (qcDualPublicSslUrl qc)
+                            (qcDualPublicRegion qc)
                             (qcDualPathPrefix qc)
 -- }}}1
 
@@ -105,6 +110,7 @@ priOfQiniuDualConfig qc = QiniuConfig
                             (qcDualPrivateBucket qc)
                             (qcDualPrivateDomain qc)
                             (qcDualPrivateSslUrl qc)
+                            (qcDualPrivateRegion qc)
                             (qcDualPathPrefix qc)
 -- }}}1
 
