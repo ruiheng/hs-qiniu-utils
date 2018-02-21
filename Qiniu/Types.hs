@@ -233,6 +233,9 @@ newtype AccessToken = AccessToken { unAccessToken :: Text }
 
 
 -- | 上传文件及抓取第三方资源都返回这样的值
+-- XXX: 实际上，根据上传策略的文档，上传结果的返回内容受 returnBody 影响
+--      读 js-sdk 代码中的node.js服务器端代码也反映了这个逻辑
+-- 所以以下这个类型只能说是未指定 returnBody 时的结果
 data UploadedFileInfo = UploadedFileInfo {
                             ufiHash     :: EtagHash
                             , ufiKey    :: ResourceKey

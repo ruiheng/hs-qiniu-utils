@@ -40,14 +40,24 @@ import           Qiniu.WS.Types
 
 type QiniuUploadMonad m a = (QiniuRemoteCallMonad m) => ReaderT (Region, UploadToken) m a
 
-
 uploadOneShot :: Maybe ResourceKey
               -> Maybe ByteString -- ^ optionally specify a mime type
               -> FilePath         -- ^ original file name
               -> LB.ByteString    -- ^ content of the file to uploaded
               -> QiniuUploadMonad m (WsResult UploadedFileInfo)
+uploadOneShot = uploadOneShot'
+
+
+-- | 根据上传策略文档及官方js-sdk代码，上传结果内容受上传策略中的returnBody影响
+-- 所以上传结果实际上是不确定的类型
+uploadOneShot' :: FromJSON a
+               => Maybe ResourceKey
+               -> Maybe ByteString -- ^ optionally specify a mime type
+               -> FilePath         -- ^ original file name
+               -> LB.ByteString    -- ^ content of the file to uploaded
+               -> QiniuUploadMonad m (WsResult a)
 -- {{{1
-uploadOneShot m_key m_mime fp' bs = runExceptT $ do
+uploadOneShot' m_key m_mime fp' bs = runExceptT $ do
   sess <- lift $ lift ask
   (region, upload_token) <- ask
 
@@ -180,8 +190,18 @@ uploadMkfile :: Int64                   -- ^ file size
              -> Text               -- ^ last host
              -> [Text]             -- ^ list of ctx
              -> QiniuUploadMonad m (WsResult UploadedFileInfo)
+uploadMkfile = uploadMkfile'
+
+uploadMkfile' :: FromJSON a
+              => Int64                   -- ^ file size
+              -> Maybe FilePath          -- ^ optional: original file name
+              -> Maybe ResourceKey
+              -> Maybe ByteString     -- ^ optionally specify a mime type
+              -> Text               -- ^ last host
+              -> [Text]             -- ^ list of ctx
+              -> QiniuUploadMonad m (WsResult a)
 -- {{{1
-uploadMkfile file_size m_fp m_key m_mime host ctx_list = runExceptT $ do
+uploadMkfile' file_size m_fp m_key m_mime host ctx_list = runExceptT $ do
   sess <- lift $ lift ask
   (_region, upload_token) <- ask
   let opts = defaults & header "Content-Type" .~ ["application/octet-stream"]
@@ -203,8 +223,7 @@ uploadMkfile file_size m_fp m_key m_mime host ctx_list = runExceptT $ do
 -- }}}1
 
 
-uploadByBlocks :: forall m. ()
-               => OnWsCallError m
+uploadByBlocks :: OnWsCallError m
                -> UploadOpDoneReporter m
                -> Int64            -- ^ block size
                -> Int64            -- ^ chunk size
@@ -213,8 +232,20 @@ uploadByBlocks :: forall m. ()
                -> Maybe ByteString     -- ^ optionally specify a mime type
                -> LB.ByteString    -- ^ content of the file to uploaded
                -> QiniuUploadMonad m (WsResultP UploadedFileInfo)
+uploadByBlocks = uploadByBlocks'
+
+uploadByBlocks' :: forall m a. (FromJSON a)
+                => OnWsCallError m
+                -> UploadOpDoneReporter m
+                -> Int64            -- ^ block size
+                -> Int64            -- ^ chunk size
+                -> Maybe FilePath
+                -> Maybe ResourceKey
+                -> Maybe ByteString     -- ^ optionally specify a mime type
+                -> LB.ByteString    -- ^ content of the file to uploaded
+                -> QiniuUploadMonad m (WsResultP a)
 -- {{{1
-uploadByBlocks on_err on_done block_size chunk_size m_fp m_key m_mime bs = runExceptT $ do
+uploadByBlocks' on_err on_done block_size chunk_size m_fp m_key m_mime bs = runExceptT $ do
   let go cpr_list offset bs_to_upload = do
         let (bs1, bs2) = LB.splitAt block_size bs_to_upload
         cpr <- ExceptT $ uploadOneBlock on_err (on_done offset) chunk_size bs1
@@ -225,7 +256,7 @@ uploadByBlocks on_err on_done block_size chunk_size m_fp m_key m_mime bs = runEx
 
   cprs <- go [] 0 bs
   ExceptT $ retryWsCall "uploadMkfile" on_err' $
-    liftM packError $ uploadMkfile
+    liftM packError $ uploadMkfile'
                         (LB.length bs)
                         m_fp
                         m_key
@@ -309,8 +340,17 @@ uploadByBlocksContinue :: forall m. (MonadBaseControl IO m)
                        -> RecoverUploadInfo
                        -> LB.ByteString    -- ^ content of the file to uploaded
                        -> QiniuUploadMonad m (WsResultP UploadedFileInfo)
+uploadByBlocksContinue = uploadByBlocksContinue'
+
+uploadByBlocksContinue' :: forall m a. (FromJSON a)
+                        => OnWsCallError m
+                        -> UploadOpDoneReporter m
+                        -> Int
+                        -> RecoverUploadInfo
+                        -> LB.ByteString    -- ^ content of the file to uploaded
+                        -> QiniuUploadMonad m (WsResultP a)
 -- {{{1
-uploadByBlocksContinue on_err on_done thread_num0 rui bs = runExceptT $ do
+uploadByBlocksContinue' on_err on_done thread_num0 rui bs = runExceptT $ do
   let block_size = ruiBlockSize rui
       chunk_size = ruiChunkSize rui
       m_fp = ruiFileName rui
@@ -326,7 +366,7 @@ uploadByBlocksContinue on_err on_done thread_num0 rui bs = runExceptT $ do
 
   cprs <- threadPoolRun thread_num actions >>= either throwM return
   ExceptT $ retryWsCall "uploadMkfile" on_err' $
-    liftM packError $ uploadMkfile
+    liftM packError $ uploadMkfile'
                         (LB.length bs)
                         m_fp
                         m_key
