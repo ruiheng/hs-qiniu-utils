@@ -145,6 +145,10 @@ data PutPolicy =
          , ppFileSizeLimit       :: Maybe Int64
          , ppDetectMime          :: Maybe Bool
          , ppMimeLimit           :: Maybe Text
+         , ppDeleteAfterDays     :: Maybe Int
+         -- ^ deleteAfterDays 的逻辑现在的文档并不记录
+         -- 但在网上的代码，及官方js-sdk的代码中都可以看到
+         -- 不确定官方是打算删除这个字段还是目前文档的错误
          , ppFileStoreType       :: Maybe FileStoreType
          }
 
@@ -192,6 +196,7 @@ instance ToJSON PutPolicy where
             , fmap ("fsizeLimit" .=) (ppFileSizeLimit pp)
             , fmap ("detectMime" .=) (ppDetectMime pp)
             , fmap ("mimeLimit" .=) (ppMimeLimit pp)
+            , fmap ("deleteAfterDays" .=) (ppDeleteAfterDays pp)
             , fmap ("fileType" .=) (fromEnum <$> ppFileStoreType pp)
             ]
         where
@@ -218,7 +223,7 @@ mkPutPolicy scope save_key dt = liftIO $ do
             Nothing Nothing
             [] Nothing Nothing Nothing
             [] Nothing Nothing
-            Nothing Nothing Nothing Nothing Nothing
+            Nothing Nothing Nothing Nothing Nothing Nothing
 -- }}}1
 
 
