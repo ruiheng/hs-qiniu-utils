@@ -54,11 +54,12 @@ data QiniuDualConfig =
          , qcDualPublicDomain  :: Maybe Text
          , qcDualPublicSslUrl  :: Bool
          , qcDualPublicRegion  :: Region
+         , qcDualPublicPathPrefix :: Text
          , qcDualPrivateBucket :: Bucket
          , qcDualPrivateDomain :: Maybe Text
          , qcDualPrivateSslUrl :: Bool
          , qcDualPrivateRegion :: Region
-         , qcDualPathPrefix    :: Text
+         , qcDualPrivatePathPrefix :: Text
          }
   deriving (Eq, Show)
 
@@ -75,12 +76,13 @@ instance FromJSON QiniuDualConfig where
             <*> ( fmap nullToMaybe $ o .:? "public-domain" )
             <*> ( o .:? "public-ssl-url" .!= False )
             <*> (o .: "public-region" <|> o .: "region")
+            <*> ( fmap (fromMaybe "") $ liftM2 (<|>) (o .:? "public-path-prefix") (o .:? "path-prefix") )
             <*> (fmap (Bucket . fromString) $
                                         o .: "private-bucket" >>= check_non_empty_str)
             <*> ( fmap nullToMaybe $ o .:? "private-domain" )
             <*> ( o .:? "private-ssl-url" .!= False )
             <*> (o .: "private-region" <|> o .: "region")
-            <*> ( fmap (fromMaybe "") $ o .:? "path-prefix" )
+            <*> ( fmap (fromMaybe "") $ liftM2 (<|>) (o .:? "private-path-prefix") (o .:? "path-prefix") )
         where
             check_non_empty_str s = if null s then mzero else return s
 
@@ -98,7 +100,7 @@ pubOfQiniuDualConfig qc = QiniuConfig
                             (qcDualPublicDomain qc)
                             (qcDualPublicSslUrl qc)
                             (qcDualPublicRegion qc)
-                            (qcDualPathPrefix qc)
+                            (qcDualPublicPathPrefix qc)
 -- }}}1
 
 
@@ -111,7 +113,7 @@ priOfQiniuDualConfig qc = QiniuConfig
                             (qcDualPrivateDomain qc)
                             (qcDualPrivateSslUrl qc)
                             (qcDualPrivateRegion qc)
-                            (qcDualPathPrefix qc)
+                            (qcDualPrivatePathPrefix qc)
 -- }}}1
 
 
