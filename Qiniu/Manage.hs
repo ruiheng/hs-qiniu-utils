@@ -421,7 +421,6 @@ chgm :: Entry
      -> Map Text Text
      -> [ObjChangeMetaCond]
      -> QiniuManageMonad m (WsResult ())
--- {{{1
 chgm entry m_mime vars conds =
   manageOpRemoteCall (ObjChangeMeta entry m_mime vars conds)
 
@@ -430,7 +429,6 @@ chgmMaybe :: Entry
           -> Map Text Text
           -> [ObjChangeMetaCond]
           -> QiniuManageMonad m (WsResult (Maybe ()))
--- {{{1
 chgmMaybe entry m_mime vars conds =
   fmap maybeDoesNotExist $ chgm entry m_mime vars conds
 
