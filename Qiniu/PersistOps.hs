@@ -97,6 +97,34 @@ instance PersistFop AvthumbOp where
   encodeFopToText (AvthumbOp format sub_ops) =
     mconcat $ intersperse "/" $ ("avthumb/" <> format) : map encodeAvthumbOpAsPath (sort sub_ops)
 
+
+-- | 旋转角度的选择
+data Rotation = RotateClockwiseQuarter Int  -- ^ 顺时针转多少个象限.
+              | RotateAuto
+              deriving (Show)
+
+-- | 视频帧缩略图
+data VframeOp = VframeOp Text Float (Maybe (Int, Int)) (Maybe Rotation)
+
+instance PersistFop VframeOp where
+-- {{{1
+  encodeFopToText (VframeOp fmt offset m_size m_rotate) =
+    mconcat $ catMaybes
+      [ Just $ "vframe/" <> fmt
+      , Just $ "/offset/" <> tshow offset
+      , flip fmap m_size $ \ (w, h) -> "/w/" <> tshow w <> "/h/" <> tshow h
+      , flip fmap m_rotate $ \ r -> "/rotate/" <> enc_rotate r
+      ]
+    where
+      enc_rotate (RotateClockwiseQuarter q)  = if q < 0
+                                                  then enc_rotate RotateAuto
+                                                  else case (q `rem` 4) of
+                                                         qq | qq == 0 -> enc_rotate RotateAuto
+                                                            | otherwise -> tshow (90 * qq)
+      enc_rotate RotateAuto                  = "auto"
+-- }}}1
+
+
 data PfopResp = PfopResp { unPfopResp :: PersistentId }
 
 instance FromJSON PfopResp where
