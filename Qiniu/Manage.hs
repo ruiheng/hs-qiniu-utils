@@ -244,10 +244,10 @@ $(AT.deriveJSON AT.defaultOptions { AT.fieldLabelModifier = lowerFirst . drop 2 
 
 data ObjList = ObjList
                 Bucket
-                (Maybe Int)          -- ^ limit
-                (Maybe Text)       -- ^ delimiter
-                (Maybe Text)       -- ^ prefix
-                (Maybe Text)       -- ^ marker
+                (Maybe Int)        -- limit
+                (Maybe Text)       -- delimiter
+                (Maybe Text)       -- prefix
+                (Maybe Text)       -- marker
 
 instance ObjectManageOp ObjList where
 -- {{{1
@@ -272,8 +272,8 @@ instance ObjectManageOp ObjList where
 -- It seems deprecated.
 -- 此为同步版本．异步版本未实现
 data ObjFetch = ObjFetch
-                  Text    -- ^ from url
-                  Scope   -- ^ to
+                  Text    -- from url
+                  Scope   -- to
 
 instance ObjectManageOp ObjFetch where
 -- {{{1
