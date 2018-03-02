@@ -32,6 +32,7 @@ import qualified Network.Wreq.Session       as WS
 import Qiniu.Types
 import Qiniu.Security
 import Qiniu.WS.Types
+import Qiniu.Utils
 -- }}}1
 
 
@@ -103,6 +104,16 @@ data Rotation = RotateClockwiseQuarter Int  -- ^ 顺时针转多少个象限.
               | RotateAuto
               deriving (Show)
 
+
+encRotation :: Rotation -> Text
+encRotation (RotateClockwiseQuarter q)  = if q < 0
+                                            then encRotation RotateAuto
+                                            else case (q `rem` 4) of
+                                                   qq | qq == 0 -> encRotation RotateAuto
+                                                      | otherwise -> tshow (90 * qq)
+encRotation RotateAuto                  = "auto"
+
+
 -- | 视频帧缩略图
 data VframeOp = VframeOp Text Float (Maybe (Int, Int)) (Maybe Rotation)
 
@@ -113,15 +124,34 @@ instance PersistFop VframeOp where
       [ Just $ "vframe/" <> fmt
       , Just $ "/offset/" <> tshow offset
       , flip fmap m_size $ \ (w, h) -> "/w/" <> tshow w <> "/h/" <> tshow h
-      , flip fmap m_rotate $ \ r -> "/rotate/" <> enc_rotate r
+      , flip fmap m_rotate $ \ r -> "/rotate/" <> encRotation r
       ]
     where
-      enc_rotate (RotateClockwiseQuarter q)  = if q < 0
-                                                  then enc_rotate RotateAuto
-                                                  else case (q `rem` 4) of
-                                                         qq | qq == 0 -> enc_rotate RotateAuto
-                                                            | otherwise -> tshow (90 * qq)
-      enc_rotate RotateAuto                  = "auto"
+-- }}}1
+
+
+-- | 视频采样缩略图
+data VSampleOp = VSampleOp
+                  Text    -- format
+                  Text    -- pattern
+                  Float   -- start time
+                  Float   -- duration
+                  (Maybe (Int, Int))
+                  (Maybe Rotation)
+                  (Maybe Float)
+
+instance PersistFop VSampleOp where
+-- {{{1
+  encodeFopToText (VSampleOp format pattern start_time duration m_size m_rotate m_interval) =
+    mconcat $ catMaybes
+      [ Just $ "vsample/" <> format
+      , Just $ "/ss/" <> tshow start_time
+      , Just $ "/t/" <> tshow duration
+      , flip fmap m_size $ \ (w, h) -> "/s/" <> tshow w <> "x" <> tshow h
+      , flip fmap m_rotate $ \ r -> "/rotate/" <> encRotation r
+      , flip fmap m_interval $ \ iv -> "/interval/" <> tshow iv
+      , Just $ "/pattern/" <> base64UrlEncodeT pattern
+      ]
 -- }}}1
 
 
@@ -129,6 +159,7 @@ data PfopResp = PfopResp { unPfopResp :: PersistentId }
 
 instance FromJSON PfopResp where
   parseJSON = withObject "PfopResp" $ \o -> PfopResp <$> o .: "persistentId"
+
 
 -- | 对已有的资源执行持久化数据处理
 persistOpsOnSaved :: [FopCmd]
