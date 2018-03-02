@@ -124,8 +124,6 @@ mkAccessTokenFromReq secret_key access_key req = do
     body_bb <- requestBodyToBsBuilder body
     let body_bs = BB.toLazyByteString body_bb
 
-    putStrLn $ "body_bs length: " <> tshow (length body_bs)
-    putStrLn $ "path: " <> decodeUtf8 path
     return $ mkAccessToken
                 secret_key access_key
                 path qs
