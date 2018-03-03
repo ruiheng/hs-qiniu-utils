@@ -10,6 +10,7 @@ import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.Aeson.Text as A
 import qualified Data.Aeson.TH as AT
+import           Data.List.NonEmpty (NonEmpty)
 #if defined(PERSISTENT)
 import           Database.Persist (PersistField)
 import           Database.Persist.Sql (PersistFieldSql)
@@ -69,6 +70,9 @@ instance ToJSON Scope where
 
 type Entry = (Bucket, ResourceKey)
 
+showEntry :: Entry -> Text
+showEntry (bucket, rkey) = mconcat [ "(", unBucket bucket, ", ", unResourceKey rkey, ")" ]
+
 encodedEntryUri :: Entry -> ByteString
 encodedEntryUri (bucket, key) =
   B64U.encode $ encodeUtf8 (unBucket bucket) <> ":" <> encodeUtf8 (unResourceKey key)
@@ -106,6 +110,14 @@ encodeFopToText' x m_save_entry =
   where
     s = encodeFopToText x
 -- }}}1
+
+
+-- | 串联起来的一系列指令
+newtype PersistFopSeries = PersistFopSeries { unPersistFopSeries :: NonEmpty SomePersistFop }
+
+instance PersistFop PersistFopSeries where
+  encodeFopToText (PersistFopSeries lst) = intercalate "|" $ map encodeFopToText $ toList lst
+
 
 type FopCmd = (SomePersistFop, Maybe Entry)
 
