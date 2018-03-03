@@ -249,6 +249,10 @@ persistOpStatusInProgress _                   = False
 -- }}}1
 
 
+-- | XXX: 按文档，回调时从七牛发出的报文，与主动查询时回复的报文有点不一样
+-- 主动查询回复报文内容更多
+-- 暂时理解为回调报文文档未更新同步，它应该与主动查询时得到相同的内容
+-- 实测已证实以上推测是对的
 data PersistOpInfo =
        PersistOpInfo
          { pfopInfoId :: PersistentId
@@ -270,7 +274,7 @@ instance FromJSON PersistOpInfo where
                     <*> o .: "code"
                     <*> o .: "desc"
                     <*> o .: "inputKey"
-                    <*> (Bucket <$> o .: "inputBucket")
+                    <*> o .: "inputBucket"
                     <*> o .: "items"
                     <*> o .: "pipeline"
                     <*> o .: "reqid"
@@ -282,8 +286,8 @@ data PfopInfoItem =
          { pfopInfoItemCmd :: Text
          , pfopInfoItemStatus :: PersistOpStatus
          , pfopInfoItemStatusDesc :: Text
-         , pfopInfoItemError :: Text
-         , pfopInfoItemHash :: ByteString
+         , pfopInfoItemError :: Maybe Text
+         , pfopInfoItemHash :: EtagHash
          , pfopInfoItemKey :: ResourceKey
          , pfopInfoItemReturnOld :: Bool
          }
@@ -296,8 +300,8 @@ instance FromJSON PfopInfoItem where
       PfopInfoItem <$> o .: "cmd"
                    <*> o .: "code"
                    <*> o .: "desc"
-                   <*> o .: "error"
-                   <*> fmap fromString (o .: "hash")
+                   <*> fmap maybeNonNull (o .:? "error")
+                   <*> o .: "hash"
                    <*> o .: "key"
                    <*> (fmap (/= (0 :: Int)) $ o .: "returnOld")
 -- }}}1
