@@ -4,6 +4,9 @@ module Qiniu.PersistOps
   , AvthumbFormat
   , AvthumbSubOp(..)
   , AvthumbOp(..)
+  , Rotation(..)
+  , VFrameOp(..)
+  , VSampleOp(..)
   , PersistOpStatus(..)
   , persistOpStatusFromCode
   , persistOpStatusToCode
@@ -115,11 +118,11 @@ encRotation RotateAuto                  = "auto"
 
 
 -- | 视频帧缩略图
-data VframeOp = VframeOp Text Float (Maybe (Int, Int)) (Maybe Rotation)
+data VFrameOp = VFrameOp Text Float (Maybe (Int, Int)) (Maybe Rotation)
 
-instance PersistFop VframeOp where
+instance PersistFop VFrameOp where
 -- {{{1
-  encodeFopToText (VframeOp fmt offset m_size m_rotate) =
+  encodeFopToText (VFrameOp fmt offset m_size m_rotate) =
     mconcat $ catMaybes
       [ Just $ "vframe/" <> fmt
       , Just $ "/offset/" <> tshow offset
