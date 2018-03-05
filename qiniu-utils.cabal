@@ -65,6 +65,8 @@ library
                        ExistentialQuantification
                        StandaloneDeriving
                        RankNTypes
+                       FlexibleInstances
+                       TemplateHaskell
 
   -- other-extensions:    
   build-depends:       base >=4 && <5

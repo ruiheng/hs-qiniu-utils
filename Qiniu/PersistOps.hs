@@ -7,6 +7,11 @@ module Qiniu.PersistOps
   , Rotation(..)
   , VFrameOp(..)
   , VSampleOp(..)
+  , AvInfoAudio(..)
+  , AvInfoFormat(..)
+  , AvInfoVideo(..)
+  , AvInfo(..)
+  , ImageInfo(..)
   , PersistOpStatus(..)
   , persistOpStatusFromCode
   , persistOpStatusToCode
@@ -19,19 +24,22 @@ module Qiniu.PersistOps
   ) where
 
 -- {{{1 imports
-import ClassyPrelude hiding (try)
-import Control.Lens
-import Control.Monad.Catch                  (try)
-import Control.Monad.Except                 (runExceptT, ExceptT(..))
-import Data.Aeson
-import qualified Data.ByteString.Char8      as C8
+import           ClassyPrelude hiding (try)
+import           Control.Lens
+import           Control.Monad.Catch (try)
+import           Control.Monad.Except (runExceptT, ExceptT(..))
+import           Data.Aeson
+import           Data.Aeson.TH (deriveJSON, fieldLabelModifier, defaultOptions)
+import           Data.Aeson.Types (camelTo2, typeMismatch)
+import qualified Data.ByteString.Char8 as C8
 #if defined(PERSISTENT)
-import Database.Persist                     (PersistField)
-import Database.Persist.Sql                 (PersistFieldSql)
+import           Database.Persist (PersistField)
+import           Database.Persist.Sql (PersistFieldSql)
 #endif
 
 import           Network.Wreq               (defaults, param, FormParam((:=)))
 import qualified Network.Wreq.Session       as WS
+
 import Qiniu.Types
 import Qiniu.Security
 import Qiniu.WS.Types
@@ -156,6 +164,96 @@ instance PersistFop VSampleOp where
       , Just $ "/pattern/" <> base64UrlEncodeT pattern
       ]
 -- }}}1
+
+
+-- | 暂时不实用．见 AvInfo 注释
+data AvInfoAudio =
+  AvInfoAudio
+    { avInfoAudioBitRate    :: StrNumber Int
+    , avInfoAudioChannels   :: Int
+    , avInfoAudioCodecName  :: Text
+    , avInfoAudioCodecType  :: Text
+    , avInfoAudioDuration   :: StrNumber Float
+    , avInfoAudioIndex      :: Int
+    , avInfoAudioNbFrames   :: StrNumber Int
+    , avInfoAudioRFrameRate :: Text
+    , avInfoAudioSampleFmt  :: Text
+    , avInfoAudioSampleRate :: StrNumber Int
+    , avInfoAudioStartTime  :: StrNumber Float
+    , avInfoAudioTags       :: Map Text Text
+    }
+
+$(deriveJSON (defaultOptions { fieldLabelModifier = camelTo2 '_' . drop 11 }) ''AvInfoAudio)
+
+-- | 暂时不实用．见 AvInfo 注释
+data AvInfoFormat =
+  AvInfoFormat
+    { avInfoFormatBitRate        :: StrNumber Int
+    , avInfoFormatDuration       :: StrNumber Float
+    , avInfoFormatFormatLongName :: Text
+    , avInfoFormatFormatName     :: Text
+    , avInfoFormatNbStreams      :: StrNumber Int
+    , avInfoFormatSize           :: StrNumber Int
+    , avInfoFormatStartTime      :: StrNumber Float
+    , avInfoFormatTags           :: Map Text Text
+    }
+
+$(deriveJSON (defaultOptions { fieldLabelModifier = camelTo2 '_' . drop 12 }) ''AvInfoFormat)
+
+-- | 暂时不实用．见 AvInfo 注释
+data AvInfoVideo =
+  AvInfoVideo
+    { avInfoVideoBitRate            :: StrNumber Int
+    , avInfoVideoCodecName          :: Text
+    , avInfoVideoCodecType          :: Text
+    , avInfoVideoDisplayAspectRatio :: Text
+    , avInfoVideoDuration           :: StrNumber Float
+    , avInfoVideoHeight             :: Int
+    , avInfoVideoWidth              :: Int
+    , avInfoVideoIndex              :: Int
+    , avInfoVideoNbFrames           :: StrNumber Int
+    , avInfoVideoRFrameRate         :: Text
+    , avInfoVideoSampleAspectRatio  :: Text
+    , avInfoVideoStartTime          :: StrNumber Float
+    , avInfoVideoTags               :: Map Text Text
+    }
+
+$(deriveJSON (defaultOptions { fieldLabelModifier = camelTo2 '_' . drop 11 }) ''AvInfoVideo)
+
+
+-- | 魔法变量中的 avinfo 字段结构．非 avinfo 接口报文
+-- XXX: 实测表明，若魔法变量指定例如 ${avinfo} 这样的格式，七牛回调时推送的json报文变成非法json
+--      实用上，目前只能具体取所要的特定字段. 即例如 $(imageInfo.height)
+data AvInfo = AvInfo { avInfoAudio  :: AvInfoAudio
+                     , avInfoVideo  :: AvInfoVideo
+                     , avInfoFormat :: AvInfoFormat
+                     }
+$(deriveJSON (defaultOptions { fieldLabelModifier = camelTo2 '_' . drop 6 }) ''AvInfo)
+
+instance FromJSON (MaybeMagic AvInfo) where
+  parseJSON Null = return $ MaybeMagic Nothing
+
+  -- 核心逻辑就是检测 format 字典下 duration 至少应该有值
+  parseJSON v@(Object o) = fmap MaybeMagic $ do
+    m_fmt_o <- o .:? "format"
+    case m_fmt_o of
+      Nothing -> return Nothing
+      Just fmt_o -> do
+        has_duration <- fmap nonNullStrNumber $ fmt_o .: "duration"
+        if has_duration
+           then fmap Just $ parseJSON v
+           else return Nothing
+
+  parseJSON x = typeMismatch "AvInfo object" x
+
+
+-- | 暂时不实用．见 AvInfo 注释
+data ImageInfo = ImageInfo { imageInfoFormat     :: Text
+                           , imageInfoWidth      :: Int
+                           , imageInfoHeight     :: Int
+                           , imageInfoColorModel :: Text
+                           }
+$(deriveJSON (defaultOptions { fieldLabelModifier = lowerFirst . drop 9 }) ''ImageInfo)
 
 
 data PfopResp = PfopResp { unPfopResp :: PersistentId }
