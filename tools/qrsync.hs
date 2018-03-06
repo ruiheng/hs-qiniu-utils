@@ -105,14 +105,14 @@ byteSizeReader s = do
 parseOptions :: Parser RsyncOptions
 -- {{{1
 parseOptions = RsyncOptions <$>
-                (fmap (SecretKey . fromString) $
-                    strOption $ long "skey" <> short 's' <> help "Secret Key")
-                <*> (fmap (AccessKey . fromString) $
-                        strOption $ long "akey" <> short 'a' <> help "Access Key")
+                (fmap SecretKey $
+                        strOption'  $ long "skey" <> short 's' <> help "Secret Key")
+                <*> (fmap AccessKey $
+                        strOption' $ long "akey" <> short 'a' <> help "Access Key")
                 <*> (fmap Bucket $
-                        strOption $ long "bucket" <> short 'b' <> help "Bucket")
+                        strOption' $ long "bucket" <> short 'b' <> help "Bucket")
                 <*> (optional $ fmap ResourceKey $
-                        strOption $ long "save-key" <> short 'S'
+                        strOption' $ long "save-key" <> short 'S'
                             <> help "Resource Save Key")
                 -- 实测证明：block size 只能是 4M，除非文件只分出一个 block
                 <*> (optional $ option byteSizeReader
@@ -140,6 +140,12 @@ parseOptions = RsyncOptions <$>
                       <> value EastChina
                       <> help ("Bucket Region. Default is EastChina." <> concat (map show [EastChina .. NorthAmerica]))
                     )
+  where
+    strOption' =
+#if !MIN_VERSION_optparse_applicative(0, 14, 0)
+      fmap fromString .
+#endif
+      strOption
 -- }}}1
 
 parseFileNames :: Parser [FilePath]
