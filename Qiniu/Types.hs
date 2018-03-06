@@ -38,7 +38,7 @@ DERIVE_PERSIST(Bucket)
 
 
 newtype ResourceKey = ResourceKey { unResourceKey :: Text }
-                deriving (Eq, Ord, Show, FromJSON, ToJSON)
+                deriving (Eq, Ord, Show, FromJSON, ToJSON, Monoid, Semigroup)
 
 DERIVE_PERSIST(ResourceKey)
 
