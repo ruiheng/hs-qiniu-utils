@@ -9,6 +9,17 @@ import Qiniu.Config
 -- }}}1
 
 
+-- 处理结果另存: query string 中 saveas/xxx/sign/<sign> 部分的算法
+queryStringFopSaveAs :: (SecretKey, AccessKey) -> Entry -> Text -> Text
+-- {{{1
+queryStringFopSaveAs (skey, akey) entry url =
+  url_to_sign <> "/sign/" <> unAccessKey akey <> ":" <> sign_str
+  where
+    url_to_sign = url <> "|saveas/" <> encodedEntryUri entry
+    sign_str = encodedSign' skey (encodeUtf8 url_to_sign)
+-- }}}1
+
+
 resourceDownloadUrl :: IsString s
                     => Bool
                     -> Maybe Text        -- ^ domain
