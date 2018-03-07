@@ -1,6 +1,9 @@
 module Qiniu.PersistOps
   ( PersistentId(..)
   , QiniuPfopMonad
+  , ImageView2Mode(..)
+  , ImageView2Dim(..)
+  , ImageView2(..)
   , AvthumbFormat
   , AvthumbSubOp(..)
   , AvthumbOp(..)
@@ -65,6 +68,55 @@ deriving instance PersistFieldSql PersistentId
 #endif
 
 type QiniuPfopMonad m a = (QiniuRemoteCallMonad m) => ReaderT (SecretKey, AccessKey) m a
+
+
+data ImageView2Mode = ImageView2Mode0MaxEdge
+                    | ImageView2Mode1MinSize
+                    | ImageView2Mode2MaxSize
+                    | ImageView2Mode3MinSize
+                    | ImageView2Mode4MaxEdge
+                    | ImageView2Mode5MminEdge
+                    deriving (Show, Eq, Enum, Bounded)
+
+-- | XXX:  注意此函数实现依赖上面定义时的ctor顺序
+encodeImageView2Mode :: ImageView2Mode -> Text
+encodeImageView2Mode = ("/" <>) . tshow . fromEnum
+
+
+data ImageView2Dim = ImageView2DimX Int
+                   | ImageView2DimY Int
+                   | ImageView2DimXY Int Int
+
+encodeImageView2Dim :: ImageView2Dim -> Text
+encodeImageView2Dim (ImageView2DimX x)    = "/w/" <> tshow x
+encodeImageView2Dim (ImageView2DimY y)    = "/h/" <> tshow y
+encodeImageView2Dim (ImageView2DimXY x y) = "/w/" <> tshow x <> "/h/" <> tshow y
+
+
+-- | 图片基本处理
+-- https://developer.qiniu.com/dora/manual/1279/basic-processing-images-imageview2
+data ImageView2 = ImageView2 ImageView2Mode ImageView2Dim
+                    (Maybe Text)  -- format
+                    (Maybe Bool)    -- 是否渐进
+                    (Maybe Int)    -- quality
+                    (Maybe Bool)    -- ignore error
+
+
+instance PersistFop ImageView2 where
+-- {{{1
+  encodeFopToText (ImageView2 mode dim m_format m_interlace m_quality m_ignore_error) =
+    mconcat $ catMaybes $
+      [ Just $ "imageView2" <> encodeImageView2Mode mode <> encodeImageView2Dim dim
+      , ("/format/" <>) <$> m_format
+      , ("/interlace/" <>) . encode_bool <$> m_interlace
+      , ("/q/" <>) . tshow <$> m_quality
+      , ("/ignore-error/" <>) . encode_bool <$> m_ignore_error
+      ]
+    where
+      encode_bool True = "1"
+      encode_bool False = "0"
+-- }}}1
+
 
 -- | 音视频处理的格式参数
 type AvthumbFormat = Text
