@@ -19,6 +19,8 @@ import           Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import           Data.Aeson (FromJSON, ToJSON, toJSON, object, (.=))
 import           Data.Time (NominalDiffTime, addUTCTime)
 import           Network.URI (escapeURIString)
+
+import Qiniu.Utils
 -- }}}1
 
 
@@ -73,9 +75,9 @@ type Entry = (Bucket, ResourceKey)
 showEntry :: Entry -> Text
 showEntry (bucket, rkey) = mconcat [ "(", unBucket bucket, ", ", unResourceKey rkey, ")" ]
 
-encodedEntryUri :: Entry -> ByteString
+encodedEntryUri :: IsString s => Entry -> s
 encodedEntryUri (bucket, key) =
-  B64U.encode $ encodeUtf8 (unBucket bucket) <> ":" <> encodeUtf8 (unResourceKey key)
+  base64UrlEncode $ encodeUtf8 $ unBucket bucket <> ":" <> unResourceKey key
 
 
 newtype EtagHash = EtagHash { unEtagHash :: Text }
