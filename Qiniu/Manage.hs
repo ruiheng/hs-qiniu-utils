@@ -411,7 +411,7 @@ moveMaybe :: Entry        -- ^ from
           -> Entry        -- ^ to
           -> QiniuManageMonad m (WsResult (Maybe (Maybe ())))
           -- ^ Nothing: source does not exist
-          --   Just Nothing: dest does not exist
+          --   Just Nothing: dest already exists
           --   Just (Just ()): success
 moveMaybe = (fmap (maybeDoesNotExist . maybeAlreadyExists) .) . move
 
