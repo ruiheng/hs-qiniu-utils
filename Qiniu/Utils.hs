@@ -128,7 +128,9 @@ instance (NumFromDoubleOrInteger a, Read a) => FromJSON (MaybeMagic (StrNumber a
   parseJSON v@(A.String x) = fmap MaybeMagic $
     if null x
        then return Nothing
-       else parseJSON v
+       else case x of
+              "null" -> return Nothing
+              _      -> parseJSON v
 
   parseJSON A.Null = fmap MaybeMagic $ return Nothing
 
