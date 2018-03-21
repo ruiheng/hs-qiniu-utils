@@ -51,6 +51,7 @@ library
                        Qiniu.Error
                        Qiniu.Config
                        Qiniu.WebPlayer
+                       Qiniu.Class
                        Qiniu
                        Qiniu.Region
   other-modules:       Qiniu.HttpClient

@@ -12,6 +12,7 @@ module Qiniu
     , module Qiniu.Utils
     , module Qiniu.WebPlayer
     , module Qiniu.Region
+    , module Qiniu.Class
     ) where
 
 import Qiniu.Types
@@ -27,3 +28,4 @@ import Qiniu.Config
 import Qiniu.Utils
 import Qiniu.WebPlayer
 import Qiniu.Region
+import Qiniu.Class
