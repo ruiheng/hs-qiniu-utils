@@ -84,7 +84,7 @@ newtype EtagHash = EtagHash { unEtagHash :: Text }
   deriving (Eq, Ord, Show, FromJSON, ToJSON)
 
 instance Byteable EtagHash where
-  toBytes = fst . B16.decode . encodeUtf8 . unEtagHash
+  toBytes = encodeUtf8 . unEtagHash
 
 
 -- | 持久化数据处理的队列
