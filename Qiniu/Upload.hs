@@ -8,20 +8,22 @@
 module Qiniu.Upload where
 
 -- {{{1 imports
-import           ClassyPrelude hiding (try, finally)
+import           ClassyPrelude
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Aeson.TH as AT
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map as Map
 import           Control.Monad.Trans.Except (runExceptT, ExceptT(..))
-import           Control.Monad.Catch (try, finally)
 import           Control.Monad.Logger
 import           Control.Monad.Trans.Control (MonadBaseControl, liftBaseWith, restoreM)
 import           Control.Concurrent.STM (check)
 #if !MIN_VERSION_classy_prelude(1, 0, 0)
 import           Control.Concurrent.Async (async)
 #endif
+
+#if !MIN_VERSION_classy_prelude(1, 5, 0)
 import           Control.Concurrent.Async (waitCatch)
+#endif
 
 import           Data.Aeson (FromJSON, ToJSON, parseJSON, toJSON, object, withObject, (.:), (.:?),
                              (.=))
@@ -85,7 +87,7 @@ data ChunkPutResult = ChunkPutResult { cprCtx :: Text, cprOffset :: Int64, cprHo
 
 $(AT.deriveJSON AT.defaultOptions { AT.fieldLabelModifier = toLower . drop 3 } ''ChunkPutResult)
 
-respJsonGetChunkPutResult :: (MonadThrow m)
+respJsonGetChunkPutResult :: (MonadIO m)
                           => Response WsRespBodyNormal
                           -> m ChunkPutResult
 -- {{{1
@@ -342,7 +344,7 @@ uploadByBlocksContinue :: forall m. (MonadBaseControl IO m)
                        -> QiniuUploadMonad m (WsResultP UploadedFileInfo)
 uploadByBlocksContinue = uploadByBlocksContinue'
 
-uploadByBlocksContinue' :: forall m a. (FromJSON a)
+uploadByBlocksContinue' :: forall m a. (FromJSON a, MonadBaseControl IO m)
                         => OnWsCallError m
                         -> UploadOpDoneReporter m
                         -> Int
@@ -364,7 +366,7 @@ uploadByBlocksContinue' on_err on_done thread_num0 rui bs = runExceptT $ do
              (uncurry $ uploadOneBlockConinue on_err on_done block_size chunk_size bs)) $ zip [0 ..]
                                                                                             blk_cpr_list
 
-  cprs <- threadPoolRun thread_num actions >>= either throwM return
+  cprs <- threadPoolRun thread_num actions >>= either (liftIO . throwIO) return
   ExceptT $ retryWsCall "uploadMkfile" on_err' $
     liftM packError $ uploadMkfile'
                         (LB.length bs)

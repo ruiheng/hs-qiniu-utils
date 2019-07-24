@@ -27,9 +27,8 @@ module Qiniu.PersistOps
   ) where
 
 -- {{{1 imports
-import           ClassyPrelude hiding (try)
+import           ClassyPrelude
 import           Control.Lens
-import           Control.Monad.Catch (try)
 import           Control.Monad.Except (runExceptT, ExceptT(..))
 import           Data.Aeson
 import           Data.Aeson.TH (deriveJSON, fieldLabelModifier, defaultOptions)

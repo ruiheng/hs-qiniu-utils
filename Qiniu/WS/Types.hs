@@ -5,13 +5,12 @@
 module Qiniu.WS.Types where
 
 -- {{{1 imports
-import ClassyPrelude hiding (catch)
+import ClassyPrelude
 import Control.Monad.Logger
 import qualified Data.ByteString.Lazy       as LB
 import Data.Aeson                           (Value, withObject, (.:)
                                             , FromJSON, parseJSON)
 import qualified Data.Aeson                 as A
-import Control.Monad.Catch                  (catch)
 import Control.Monad.Trans.Class            (MonadTrans)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Network.HTTP.Client                  (HttpException(..))
@@ -20,14 +19,17 @@ import Network.HTTP.Client                  (HttpExceptionContent(..), responseS
 #endif
 import Network.HTTP.Types                   (statusCode)
 
+import qualified Control.Exception.Safe as ExcSafe
+
 import Network.Wreq hiding (statusCode)
 import qualified Network.Wreq as Wreq
 import qualified Network.Wreq.Session as WS
 import Control.Lens
+
 -- }}}1
 
 
-type QiniuRemoteCallMonad m = (MonadIO m, MonadBaseControl IO m, MonadThrow m, MonadLogger m, MonadReader WS.Session m)
+type QiniuRemoteCallMonad m = (MonadIO m, MonadLogger m, MonadReader WS.Session m)
 
 type WsRespBodyNormal = Map Text Value
 
@@ -65,11 +67,11 @@ instance FromJSON WsRespBody where
 
 type WsResponse = Response WsRespBody
 
-asWsResponse :: (MonadThrow m) => Response LB.ByteString -> m WsResponse
-asWsResponse = asJSON
+asWsResponse :: (MonadIO m) => Response LB.ByteString -> m WsResponse
+asWsResponse = liftIO . asJSON
 
 
-asWsResponseEmpty :: (MonadThrow m)
+asWsResponseEmpty :: (MonadIO m)
                   => Response LB.ByteString
                   -> m (Either WsError ())
 -- {{{1
@@ -82,11 +84,11 @@ asWsResponseEmpty rb = runExceptT $ do
             return ()
 -- }}}1
 
-asWsResponseNormal :: (MonadThrow m)
+asWsResponseNormal :: (MonadIO m)
                    => Response LB.ByteString
                    -> m (Either WsError (Response WsRespBodyNormal))
 -- {{{1
-asWsResponseNormal rb = do
+asWsResponseNormal rb = liftIO $ do
   r <- liftM (over responseBody unWsRespBody) $ asWsResponse rb
   case r ^. responseBody of
     Left err -> do err' <- if __wsHttpCode err /= wsErrorCodePlaceHolder
@@ -98,20 +100,20 @@ asWsResponseNormal rb = do
     Right nb -> return $ Right $ r & responseBody .~ nb
 -- }}}1
 
-asWsResponseNormal' :: (MonadThrow m, FromJSON a)
+asWsResponseNormal' :: (MonadIO m, FromJSON a)
                     => Response LB.ByteString
                     -> m (Either WsError a)
 -- {{{1
-asWsResponseNormal' rb = runExceptT $ do
+asWsResponseNormal' rb = liftIO $ runExceptT $ do
     r <- ExceptT $ asWsResponseNormal rb
     case A.fromJSON $ A.toJSON $ r ^. responseBody of
-        A.Error err -> throwM $ JSONError err
+        A.Error err -> liftIO $ throwIO $ JSONError err
         A.Success x -> return x
 -- }}}1
 
 
 class AsWsResponse r where
-  asWsResponseResult :: (MonadThrow m)
+  asWsResponseResult :: (MonadIO m)
                      => Response LB.ByteString
                      -> m (Either WsError r)
 
@@ -121,18 +123,18 @@ instance AsWsResponse () where
 instance {-# OVERLAPPABLE #-} FromJSON a => AsWsResponse a where
   asWsResponseResult = asWsResponseNormal'
 
-respJsonGetByKey :: (MonadThrow m, FromJSON a)
+respJsonGetByKey :: (MonadIO m, FromJSON a)
                  => Response WsRespBodyNormal
                  -> Text
                  -> m a
 -- {{{1
 respJsonGetByKey r k = do
     v <- maybe
-        (throwM $ JSONError $ unpack $ "missing key in JSON object: " <> k)
+        (liftIO $ throwIO $ JSONError $ unpack $ "missing key in JSON object: " <> k)
         return
         (lookup k $ r ^. responseBody)
     case A.fromJSON v of
-        A.Error err -> throwM $ JSONError $ unpack $
+        A.Error err -> liftIO $ throwIO $ JSONError $ unpack $
                         "failed to parse value of key '" <> k
                             <> "' in JSON object: " <> fromString err
         A.Success x -> return x
@@ -191,10 +193,10 @@ unpackError (Right x)           = Right (Right x)
 -- }}}1
 
 
-tryWsResult :: MonadCatch m => m a -> m (WsResultP a)
+tryWsResult :: ExcSafe.MonadCatch m => m a -> m (WsResultP a)
 -- {{{1
 tryWsResult f = do
-    liftM Right f `catch` h1 `catch` h2
+    liftM Right f `ExcSafe.catch` h1 `ExcSafe.catch` h2
     where
         h1 = return . Left . Left
         h2 = return . Left . Right

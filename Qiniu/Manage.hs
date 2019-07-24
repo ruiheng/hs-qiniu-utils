@@ -7,8 +7,8 @@
 module Qiniu.Manage where
 
 -- {{{1 imports
-import           ClassyPrelude hiding (try, delete)
-import qualified Control.Exception.Lifted as Lifted
+import           ClassyPrelude hiding (delete)
+import qualified Control.Exception.Safe as ExcSafe
 import           Control.Lens (view, (&), (.~))
 import           Control.Monad.Logger
 import qualified Data.Aeson.TH as AT
@@ -19,12 +19,11 @@ import           Network.HTTP.Types (renderQueryText)
 
 -- import Control.Monad.Logger                 (MonadLogger, logDebugS, logInfoS)
 import           Control.Monad.Trans.Except (runExceptT, ExceptT(..))
-import           Control.Monad.Catch (try)
 import           Network.Mime (MimeType)
 import           Network.Wreq (responseBody, defaults, param, Options)
 import           Network.Wreq.Types (Postable)
 import qualified Network.Wreq.Session as WS
-import           Data.Conduit (Source, yield)
+import           Data.Conduit
 
 import           Qiniu.Utils (lowerFirst, ServerTimeStamp(..), intServerTimeStamp)
 
@@ -55,7 +54,7 @@ manageApiUrlApi :: String -> String
 manageApiUrlApi p = "http://" <> manageApiHostApi <> p
 
 
-type QiniuManageMonad m a = (QiniuRemoteCallMonad m) => ReaderT (SecretKey, AccessKey) m a
+type QiniuManageMonad m a = (QiniuRemoteCallMonad m, ExcSafe.MonadCatch m) => ReaderT (SecretKey, AccessKey) m a
 
 
 -- | 描述不同管理操作指令的实现区别
@@ -345,8 +344,12 @@ manageOpRemoteCall op = runExceptT $ do
       Nothing -> WS.getWith opts sess url
       Just post_data -> WS.postWith opts sess url post_data
 
-  asWsResponseResult resp `Lifted.onException`
-    ($logErrorS logSource $ "Cannot parse response body: " <> toStrict (decodeUtf8 (view responseBody resp)))
+  err_or <- liftIO $ ExcSafe.tryAny $ asWsResponseResult resp
+  case err_or of
+    Left err -> do
+      $logErrorS logSource $ "Cannot parse response body: " <> toStrict (decodeUtf8 (view responseBody resp))
+      liftIO $ throwIO err
+    Right x -> return x
   where
     url_path = objManageOpUrlPath op
     url = objManageApiUrl op $ C8.unpack url_path
@@ -481,12 +484,16 @@ list bucket limit delimiter prefix marker = do
 -- }}}1
 
 
-listSource :: QiniuRemoteCallMonad m
+listSource :: (QiniuRemoteCallMonad m, ExcSafe.MonadCatch m)
            => Bucket
            -> Maybe Int          -- ^ limit
            -> Maybe Text       -- ^ delimiter
            -> Maybe Text       -- ^ prefix
+#if MIN_VERSION_conduit(1, 3, 0)
+           -> ConduitT () ListResult (ReaderT (SecretKey, AccessKey) m) ()
+#else
            -> Source (ReaderT (SecretKey, AccessKey) m) ListResult
+#endif
             -- ^ may throw HttpException or WsError
 -- {{{1
 listSource bucket limit delimiter prefix = do
@@ -497,7 +504,7 @@ listSource bucket limit delimiter prefix = do
 
     go marker = do
       lr <- lift (list bucket limit delimiter prefix marker)
-            >>= either (either throwM throwM) return . packError
+            >>= either (liftIO . either throwIO throwIO) return . packError
       yield lr
       let new_marker = lrMarker lr
       if nothing_or_null new_marker

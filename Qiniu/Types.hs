@@ -6,7 +6,6 @@ module Qiniu.Types where
 -- {{{1 imports
 import           ClassyPrelude
 import           Data.Byteable        (Byteable(..))
-import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.Aeson.Text as A
 import qualified Data.Aeson.TH as AT

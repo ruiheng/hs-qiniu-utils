@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+-- {{{1
 import ClassyPrelude hiding (delete, try
 #if !MIN_VERSION_optparse_applicative(0, 13, 0)
                             , (<>)
@@ -13,8 +14,10 @@ import ClassyPrelude hiding (delete, try
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text.IO               as T
 import Options.Applicative
-import System.IO                            (hSetBuffering, BufferMode(..))
-
+import System.IO                            (BufferMode(..))
+#if !MIN_VERSION_classy_prelude(1, 5, 0)
+import System.IO                            (hSetBuffering)
+#endif
 import Control.Arrow                        (left)
 import Control.Monad.Logger
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet, LoggerSet)
@@ -24,13 +27,18 @@ import qualified Text.Parsec                as TP
 import qualified Text.Parsec.Token          as TPT
 import Text.Parsec.Language                 (haskellDef)
 import Data.Char                            (isSpace, isAlphaNum)
-import Data.Conduit                         (($$))
+import Data.Conduit                         (runConduit, (.|))
 import qualified Data.Conduit.List          as CL
 import qualified Network.Wreq.Session       as WS
 
 import Qiniu.Types
 import Qiniu.WS.Types
 import Qiniu.Manage
+
+#if MIN_VERSION_classy_prelude(1, 5, 0)
+import Control.Monad.Catch                  (MonadCatch, MonadMask)
+#endif
+-- }}}1
 
 
 -- | 我们会用 Parsec3 里的工具解释用户输入的指令
@@ -204,7 +212,7 @@ printResult f ws_result = do
             f x
 
 
-processCmd :: (MonadBaseControl IO m, MonadCatch m) => Command -> QiniuManageMonad m ()
+processCmd :: (MonadCatch m) => Command -> QiniuManageMonad m ()
 processCmd (Stat entry) = do
     (stat entry) >>= printResult f
     where
@@ -218,7 +226,7 @@ processCmd (Move entry_from entry_to) = do
 processCmd (ChangeMime entry mime) = do
     chgm entry (Just mime) mempty mempty >>= printResult (const $ return ())
 processCmd (List bucket prefix) = do
-  (tryWsResult $ listSource bucket (Just 1) (Just "/") (Just prefix) $$ CL.consume)
+  (tryWsResult $ runConduit $ listSource bucket (Just 1) (Just "/") (Just prefix) .| CL.consume)
         >>= printResult f . unpackError
     where
         f s = liftIO $ do
@@ -228,7 +236,7 @@ processCmd (Fetch url scope) = do
 
 
 interactive ::
-    (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
+    (MonadIO m, MonadReader WS.Session m, MonadMask m, MonadLogger m) =>
     SecretKey -> AccessKey -> m ()
 interactive secret_key access_key = do
     liftIO $ hSetBuffering stdout NoBuffering
@@ -258,7 +266,7 @@ interactive secret_key access_key = do
 
 
 start ::
-    (MonadIO m, MonadReader WS.Session m, MonadCatch m, MonadLogger m, MonadBaseControl IO m) =>
+    (MonadIO m, MonadReader WS.Session m, MonadMask m, MonadLogger m) =>
     Maybe [Command] -> ReaderT ManageOptions m ()
 start m_cmds = do
     mo <- ask

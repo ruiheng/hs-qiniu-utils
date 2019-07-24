@@ -83,7 +83,7 @@ library
                      , http-client
                      , http-types
                      , text
-                     , exceptions
+                     , safe-exceptions
                      , transformers
                      , mtl
                      , monad-logger
@@ -95,7 +95,6 @@ library
                      , data-default
                      , scientific
                      , conduit
-                     , lifted-base
                      , binary
                      , byteable
                      , base16-bytestring
@@ -233,6 +232,7 @@ executable             qmanage
                      , transformers
                      , mtl
                      , monad-logger
+                     , monad-control
                      , fast-logger
                      , parsec
                      , http-client

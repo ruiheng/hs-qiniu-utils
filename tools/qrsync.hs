@@ -30,7 +30,9 @@ import Numeric                              (readDec)
 #if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Concurrent.Async             (withAsync)
 #endif
+#if !MIN_VERSION_classy_prelude(1, 5, 0)
 import Control.Concurrent.Async             (wait)
+#endif
 
 import Options.Applicative
 import System.Exit
@@ -151,7 +153,7 @@ parseOptions = RsyncOptions <$>
 parseFileNames :: Parser [FilePath]
 parseFileNames = fmap ordNub $ some $ argument str $ metavar "FILES..."
 
-uploadOneFile :: (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m)
+uploadOneFile :: (MonadIO m, MonadLogger m, MonadBaseControl IO m)
               => WS.Session
               -> FilePath
               -> ReaderT RsyncOptions m ()
@@ -198,9 +200,9 @@ removeIfExists :: FilePath -> IO ()
 removeIfExists fileName = removeFile fileName `catch` handleExists
   where handleExists e
           | isDoesNotExistError e = return ()
-          | otherwise = throwM e
+          | otherwise = throwIO e
 
-uploadOneFileByBlock :: forall m.  (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m)
+uploadOneFileByBlock :: forall m.  (MonadIO m, MonadLogger m, MonadBaseControl IO m)
                      => WS.Session -> Int64 -> Int64 -> Maybe ByteString -> FilePath -> ReaderT RsyncOptions m ()
 -- {{{1
 uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
@@ -288,7 +290,7 @@ uploadOneFileByBlock sess block_size chunk_size m_mime fp = do
 -- }}}1
 
 
-start :: (MonadIO m, MonadThrow m, MonadLogger m, MonadBaseControl IO m)
+start :: (MonadIO m, MonadLogger m, MonadBaseControl IO m)
       => WS.Session ->[FilePath] -> ReaderT RsyncOptions m ()
 -- {{{1
 start sess fps = do
