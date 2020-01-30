@@ -1,6 +1,7 @@
 module Qiniu.PersistOps
   ( PersistentId(..)
   , QiniuPfopMonad
+  , SaveAs(..)
   , ImageView2Mode(..)
   , ImageView2Dim(..)
   , ImageView2(..)
@@ -15,6 +16,7 @@ module Qiniu.PersistOps
   , AvInfoVideo(..)
   , AvInfo(..)
   , ImageInfo(..)
+  , WatermarkTextTiled(..), WatermarkTextBlindEncode(..)
   , PersistOpStatus(..)
   , persistOpStatusFromCode
   , persistOpStatusToCode
@@ -29,10 +31,12 @@ module Qiniu.PersistOps
 -- {{{1 imports
 import           ClassyPrelude
 import           Control.Lens
+import           Control.Monad.Reader
 import           Control.Monad.Except (runExceptT, ExceptT(..))
 import           Data.Aeson
 import           Data.Aeson.TH (deriveJSON, fieldLabelModifier, defaultOptions)
 import           Data.Aeson.Types (camelTo2, typeMismatch)
+import           Data.Default (Default(..))
 import qualified Data.ByteString.Char8 as C8
 #if defined(PERSISTENT)
 import           Database.Persist (PersistField)
@@ -67,6 +71,25 @@ deriving instance PersistFieldSql PersistentId
 #endif
 
 type QiniuPfopMonad m a = (QiniuRemoteCallMonad m) => ReaderT (SecretKey, AccessKey) m a
+
+
+data SaveAs = SaveAs
+  { saveAsEntry           :: Entry
+  , saveAsDeleteAfterDays :: Maybe Int
+  }
+  deriving (Show)
+
+-- {{{1
+instance Default (Reader Entry SaveAs) where
+  def = reader $ \ x -> SaveAs x Nothing
+
+instance PersistFop SaveAs where
+  encodeFopToText (SaveAs {..}) =
+    mconcat $ catMaybes
+      [ Just $ "saveas/" <> encodedEntryUri saveAsEntry
+      , ("/deleteAfterDays/" <>) . tshow <$> saveAsDeleteAfterDays
+      ]
+-- }}}1
 
 
 data ImageView2Mode = ImageView2Mode0MaxEdge
@@ -305,6 +328,66 @@ data ImageInfo = ImageInfo { imageInfoFormat     :: Text
                            , imageInfoColorModel :: Text
                            }
 $(deriveJSON (defaultOptions { fieldLabelModifier = lowerFirst . drop 9 }) ''ImageInfo)
+
+
+-- | 文字水印
+-- https://developer.qiniu.com/dora/api/1316/image-watermarking-processing-watermark#3
+data WatermarkTextTiled =
+  WatermarkTextTiled
+    { wmtTitledText       :: Text
+    , wmtTitledFont       :: Maybe Text  -- ^ 缺省为黑体，详见支持字体列表 注意：中文水印必须指定中文字体。
+    , wmtTitledFontSize   :: Maybe Text   -- ^ 水印文字大小，单位: 缇，等于1/20磅，[1, 10000), 默认值是240缇，参考DPI为72。
+    , wmtTitledTextColor  :: Maybe Text   -- ^ 水印文字颜色，RGB格式，可以是颜色名称（比如red）或十六进制（比如#FF0000），参考RGB颜色编码表，缺省为黑色. （经过URL安全的Base64编码）
+    , wmtTitledDissolve   :: Maybe Int   -- ^ 透明度，取值范围1-100，缺省值100（完全不透明）
+    , wmtTitledRotate     :: Maybe Int   -- ^ 水印文字旋转角度，[-180, 180]， 默认为0。
+    , wmtTitledFillWidth  :: Maybe Int   -- ^ 水印文字填充单元宽度，默认值为100。
+    , wmtTitledFillHeight :: Maybe Int   -- ^ 水印文字填充单元高度，默认值为100。
+    , wmtTitledResize     :: Maybe Double   -- ^ 水印文字填充单元缩放比例，[0.1，10]，默认为1（不缩放）。
+    }
+    deriving (Show)
+
+-- {{{1 instances
+instance Default (Reader Text WatermarkTextTiled) where
+  def = reader $ \ x -> WatermarkTextTiled x Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+
+instance PersistFop WatermarkTextTiled where
+  encodeFopToText (WatermarkTextTiled {..}) =
+    mconcat $ catMaybes $
+      [ Just $ "watermark/4/text/" <> base64UrlEncodeT wmtTitledText
+      , ("/font/" <>) <$> wmtTitledFont
+      , ("/fontsize/" <>) . tshow <$> wmtTitledFontSize
+      , ("/dissolve/" <>) . tshow <$> wmtTitledDissolve
+      , ("/rotate/" <>) . tshow <$> wmtTitledRotate
+      , ("/uw/" <>) . tshow <$> wmtTitledFillWidth
+      , ("/uh/" <>) . tshow <$> wmtTitledFillHeight
+      , ("/resize/" <>) . tshow <$> wmtTitledResize
+      ]
+-- }}}1
+
+
+-- | 文字盲水印
+-- CAUTION: 1 元/千次
+-- https://developer.qiniu.com/dora/api/5915/blind-watermarking-processing#3
+data WatermarkTextBlindEncode =
+  WatermarkTextBlindEncode
+    { wmtBlindEncodeText    :: ByteString  -- ^ 只支持英文数字字符，不支持中文字符，数量上线为10
+    , wmtBlindEncodeVersion :: Maybe Int -- ^ 接口版本 可选 1 或者 2, 默认为 1
+    }
+  deriving (Show)
+
+-- {{{1 instances
+instance Default (Reader ByteString WatermarkTextBlindEncode) where
+  def = reader $ \ x -> WatermarkTextBlindEncode x Nothing
+
+instance PersistFop WatermarkTextBlindEncode where
+  encodeFopToText (WatermarkTextBlindEncode bs m_ver) =
+    mconcat $ catMaybes
+      [ Just "watermark/6"
+      , ("/version/" <>) . tshow <$> m_ver
+      , Just "/method/encode"
+      , Just $ ("/text/" <>) . decodeUtf8 $ bs
+      ]
+-- }}}1
 
 
 data PfopResp = PfopResp { unPfopResp :: PersistentId }

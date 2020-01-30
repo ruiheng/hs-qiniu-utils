@@ -102,6 +102,7 @@ data SomePersistFop = forall a. PersistFop a => SomePersistFop a
 instance PersistFop SomePersistFop where
   encodeFopToText (SomePersistFop x) = encodeFopToText x
 
+{-# DEPRECATED encodeFopToText' "use 'SaveAs' in PersistOps instead" #-}
 encodeFopToText' :: PersistFop a => a -> Maybe Entry -> Text
 -- {{{1
 encodeFopToText' x m_save_entry =
