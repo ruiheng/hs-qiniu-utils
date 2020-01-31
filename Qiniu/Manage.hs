@@ -28,6 +28,7 @@ import           Data.Conduit
 import           Qiniu.Utils (lowerFirst, ServerTimeStamp(..), intServerTimeStamp)
 
 import           Qiniu.Types
+import           Qiniu.Upload
 import           Qiniu.Security
 import           Qiniu.WS.Types
 import           Qiniu.Error

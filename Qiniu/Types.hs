@@ -7,16 +7,11 @@ module Qiniu.Types where
 import           ClassyPrelude
 import           Data.Byteable        (Byteable(..))
 import qualified Data.ByteString.Base64.URL as B64U
-import qualified Data.Aeson.Text as A
-import qualified Data.Aeson.TH as AT
-import           Data.List.NonEmpty (NonEmpty)
 #if defined(PERSISTENT)
 import           Database.Persist (PersistField)
 import           Database.Persist.Sql (PersistFieldSql)
 #endif
-import           Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
-import           Data.Aeson (FromJSON, ToJSON, toJSON, object, (.=))
-import           Data.Time (NominalDiffTime, addUTCTime)
+import           Data.Aeson (FromJSON, ToJSON, toJSON)
 import           Network.URI (escapeURIString)
 
 import Qiniu.Utils
@@ -93,41 +88,6 @@ newtype Pipeline = Pipeline { unPipeline :: Text }
 DERIVE_PERSIST(Pipeline)
 
 
--- | 所有持久化数据处理指令
-class PersistFop a where
-  encodeFopToText :: a -> Text
-
-data SomePersistFop = forall a. PersistFop a => SomePersistFop a
-
-instance PersistFop SomePersistFop where
-  encodeFopToText (SomePersistFop x) = encodeFopToText x
-
-{-# DEPRECATED encodeFopToText' "use 'SaveAs' in PersistOps instead" #-}
-encodeFopToText' :: PersistFop a => a -> Maybe Entry -> Text
--- {{{1
-encodeFopToText' x m_save_entry =
-  case m_save_entry of
-    Nothing -> s
-    Just entry -> s <> "|saveas/" <> decodeUtf8 (encodedEntryUri entry)
-  where
-    s = encodeFopToText x
--- }}}1
-
-
--- | 串联起来的一系列指令
-newtype PersistFopSeries = PersistFopSeries { unPersistFopSeries :: NonEmpty SomePersistFop }
-
-instance PersistFop PersistFopSeries where
-  encodeFopToText (PersistFopSeries lst) = intercalate "|" $ map encodeFopToText $ toList lst
-
-
-type FopCmd = (SomePersistFop, Maybe Entry)
-
-encodeFopCmdList :: [FopCmd] -> Text
-encodeFopCmdList ops =
-  mconcat $ intersperse ";" $ map (uncurry encodeFopToText') ops
-
-
 data CallbackBodyType = CbQueryString
                       | CbJson
                       deriving (Show, Eq, Ord, Enum, Bounded)
@@ -136,115 +96,6 @@ data CallbackBodyType = CbQueryString
 data FileStoreType = FileStoreStandard  -- ^ 标准存储
                    | FileStoreLowFreq    -- ^ 低频存储
                    deriving (Eq, Ord, Bounded, Enum)
-
-data PutPolicy =
-       PutPolicy
-         { ppScope               :: Scope
-         , ppSaveKey             :: Maybe ResourceKey
-         , ppDeadline            :: UTCTime
-         , ppIsPrefixalScope     :: Maybe Bool
-         , ppInsertOnly          :: Maybe Bool
-         , ppEndUser             :: Maybe Text
-         , ppReturnUrl           :: Maybe Text
-         , ppReturnBody          :: Maybe (Map Text Text)
-         , ppCallbackUrls        :: [Text]
-         , ppCallbackHost        :: Maybe Text
-         , ppCallbackBody        :: Maybe (Map Text Text)
-         , ppCallbackBodyType    :: Maybe CallbackBodyType
-         , ppPersistentOps       :: [FopCmd]
-         , ppPersistentNotifyUrl :: Maybe Text
-         , ppPersistentPipeline  :: Maybe Pipeline
-         , ppFileSizeMin         :: Maybe Int64
-         , ppFileSizeLimit       :: Maybe Int64
-         , ppDetectMime          :: Maybe Bool
-         , ppMimeLimit           :: Maybe Text
-         , ppDeleteAfterDays     :: Maybe Int
-         -- ^ deleteAfterDays 的逻辑现在的文档并不记录
-         -- 但在网上的代码，及官方js-sdk的代码中都可以看到
-         -- 不确定官方是打算删除这个字段还是目前文档的错误
-         , ppFileStoreType       :: Maybe FileStoreType
-         }
-
--- {{{1 instances
-instance ToJSON PutPolicy where
-    toJSON pp =
-        object $ catMaybes
-            [ Just $ "scope"       .= ppScope pp
-            , Just $ "saveKey"     .= fmap unResourceKey (ppSaveKey pp)
-            , Just $ "deadline"    .= (round $ utcTimeToPOSIXSeconds $ ppDeadline pp :: Int64)
-            , fmap (("isPrefixalScope" .=) . fromEnum) (ppIsPrefixalScope pp)
-            , fmap (("insertOnly" .=) . fromEnum) (ppInsertOnly pp)
-            , fmap ("endUser" .=) (ppEndUser pp)
-            , fmap ("returnUrl" .=) (ppReturnUrl pp)
-            , fmap ("returnBody" .=) (map_to_qs <$> ppReturnBody pp)
-
-            , if null cb_urls
-                 then Nothing
-                 else Just $ "callbackUrl" .= intercalate ";" cb_urls
-
-            , if null cb_urls
-                 then Nothing
-                 else fmap ("callbackHost" .=) (ppCallbackHost pp)
-
-            , if null cb_urls
-                 then Nothing
-                 else case effective_callback_body_type of
-                        CbQueryString -> fmap ("callbackBody" .=) cb_var_map_qs
-                        CbJson -> ("callbackBody" .=) . A.encodeToLazyText <$> cb_var_map_json
-
-            , if null cb_urls
-                 then Nothing
-                 else flip fmap (ppCallbackBodyType pp) $ \ t ->
-                        case t of
-                          CbQueryString -> "callbackBodyType" .= asText "application/x-www-form-urlencoded"
-                          CbJson -> "callbackBodyType" .= asText "application/json"
-
-            , case encodeFopCmdList (ppPersistentOps pp) of
-                t | not (null t) -> Just $ "persistentOps" .= t
-                  | otherwise    -> Nothing
-
-            , fmap ("persistentNotifyUrl" .=) (ppPersistentNotifyUrl pp)
-            , fmap (("persistentPipeline" .=) . unPipeline)
-                    (ppPersistentPipeline pp)
-
-            , fmap ("fsizeMin" .=) (ppFileSizeMin pp)
-            , fmap ("fsizeLimit" .=) (ppFileSizeLimit pp)
-            , fmap ("detectMime" .=) (ppDetectMime pp)
-            , fmap ("mimeLimit" .=) (ppMimeLimit pp)
-            , fmap ("deleteAfterDays" .=) (ppDeleteAfterDays pp)
-            , fmap ("fileType" .=) (fromEnum <$> ppFileStoreType pp)
-            ]
-        where
-          cb_urls = ppCallbackUrls pp
-          cb_var_map = ppCallbackBody pp
-
-          map_to_qs :: Map Text Text -> Text
-          map_to_qs m = intercalate "&" $ flip map (mapToList m) $ \ (k, v) -> k <> "=" <> v
-
-          cb_var_map_qs = map_to_qs <$> cb_var_map
-          cb_var_map_json = cb_var_map
-          effective_callback_body_type = fromMaybe CbQueryString $ ppCallbackBodyType pp
--- }}}1
-
-
-mkPutPolicy :: MonadIO m
-            => Scope
-            -> Maybe ResourceKey    -- ^ the 'saveKey' field
-            -> NominalDiffTime
-            -> m PutPolicy
--- {{{1
-mkPutPolicy scope save_key dt = liftIO $ do
-  now <- getCurrentTime
-  let t = addUTCTime dt now
-  return $ PutPolicy scope save_key t
-            Nothing
-            Nothing Nothing
-            Nothing Nothing
-            [] Nothing Nothing Nothing
-            [] Nothing Nothing
-            Nothing Nothing Nothing Nothing Nothing Nothing
--- }}}1
-
 
 newtype SecretKey = SecretKey { unSecretKey :: Text }
                     deriving (Eq, Ord, Show)
@@ -255,20 +106,6 @@ newtype AccessKey = AccessKey { unAccessKey :: Text }
 newtype AccessToken = AccessToken { unAccessToken :: Text }
                     deriving (Eq, Ord, Show)
 
-
--- | 上传文件及抓取第三方资源都返回这样的值
--- XXX: 实际上，根据上传策略的文档，上传结果的返回内容受 returnBody 影响
---      读 js-sdk 代码中的node.js服务器端代码也反映了这个逻辑
--- 所以以下这个类型只能说是未指定 returnBody 时的结果
-data UploadedFileInfo = UploadedFileInfo {
-                            ufiHash     :: EtagHash
-                            , ufiKey    :: ResourceKey
-                        }
-                        deriving (Eq, Show)
-
-$(AT.deriveJSON
-    AT.defaultOptions{AT.fieldLabelModifier = toLower . drop 3}
-    ''UploadedFileInfo)
 
 
 

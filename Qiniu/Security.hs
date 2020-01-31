@@ -11,11 +11,8 @@ import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Char8 as C8
-import qualified Data.Aeson as A
-import           Data.Text.Encoding         (decodeLatin1)
 import qualified Blaze.ByteString.Builder as BB
 import qualified Blaze.ByteString.Builder.Char.Utf8 as BBU8
-import           Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import           Network.HTTP.Client (Request, defaultRequest)
 import           Network.HTTP.Types (Header, hAuthorization, renderQueryText)
 import qualified Network.Wreq as W
@@ -35,53 +32,6 @@ encodedSign skey = B64U.encode . sign skey
 
 encodedSign' :: IsString s => SecretKey -> ByteString -> s
 encodedSign' skey = fromString . C8.unpack . encodedSign skey
-
-newtype UploadToken = UploadToken { unUploadToken :: Text }
-
-uploadToken :: SecretKey -> AccessKey -> PutPolicy -> UploadToken
--- {{{1
-uploadToken skey akey pp =
-    UploadToken $ mconcat
-        [ unAccessKey akey
-        , ":"
-        , encoded_sign
-        , ":"
-        , decodeLatin1 $ encoded_pp
-        ]
-    where
-        encoded_pp = B64U.encode $ LB.toStrict $ A.encode pp
-        encoded_sign = decodeLatin1 $ encodedSign skey encoded_pp
--- }}}1
-
-newtype DownloadToken = DownloadToken { unDownloadToken :: Text }
-
-authedDownloadUrl :: SecretKey
-                  -> AccessKey
-                  -> UTCTime
-                  -> Text
-                  -> Text
--- {{{1
-authedDownloadUrl skey akey expiry url =
-    url2 <> "&token=" <> unDownloadToken token
-    where
-        encoded_sign    = encodedSign' skey $ encodeUtf8 url2
-
-        e               = if '?' `elem` url
-                            then "&e="
-                            else "?e="
-
-        url2            = mconcat
-                            [ url
-                            , e
-                            , tshow (round $ utcTimeToPOSIXSeconds expiry :: Int64)
-                            ]
-
-        token           = DownloadToken $ mconcat
-                            [ unAccessKey akey
-                            , ":"
-                            , encoded_sign
-                            ]
--- }}}1
 
 
 -- | 创建 Access Token 的算法

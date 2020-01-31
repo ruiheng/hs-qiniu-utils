@@ -4,13 +4,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE CPP #-}
-
 module Qiniu.Upload where
 
 -- {{{1 imports
 import           ClassyPrelude
 import qualified Data.ByteString.Lazy as LB
-import qualified Data.Aeson.TH as AT
+import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map as Map
 import           Control.Monad.Trans.Except (runExceptT, ExceptT(..))
@@ -25,20 +24,170 @@ import           Control.Concurrent.Async (async)
 import           Control.Concurrent.Async (waitCatch)
 #endif
 
+import qualified Data.Aeson as A
+import qualified Data.Aeson.Text as A
+import qualified Data.Aeson.TH as AT
 import           Data.Aeson (FromJSON, ToJSON, parseJSON, toJSON, object, withObject, (.:), (.:?),
                              (.=))
+import           Data.Text.Encoding         (decodeLatin1)
+import           Data.Time
+import           Data.Time.Clock.POSIX
 
 import           Network.Wreq
 import qualified Network.Wreq.Session as WS
 import           Control.Lens hiding ((.=))
 
-import           Qiniu.Region
+import           Qiniu.PersistOps
 import           Qiniu.Security
+import           Qiniu.Region
 import           Qiniu.Types
 import           Qiniu.Utils
 import           Qiniu.WS.Types
 -- }}}1
 
+
+data PutPolicy =
+       PutPolicy
+         { ppScope               :: Scope
+         , ppSaveKey             :: Maybe ResourceKey
+         , ppDeadline            :: UTCTime
+         , ppIsPrefixalScope     :: Maybe Bool
+         , ppInsertOnly          :: Maybe Bool
+         , ppEndUser             :: Maybe Text
+         , ppReturnUrl           :: Maybe Text
+         , ppReturnBody          :: Maybe (Map Text Text)
+         , ppCallbackUrls        :: [Text]
+         , ppCallbackHost        :: Maybe Text
+         , ppCallbackBody        :: Maybe (Map Text Text)
+         , ppCallbackBodyType    :: Maybe CallbackBodyType
+         , ppPersistentOps       :: [FopCmd]
+         , ppPersistentNotifyUrl :: Maybe Text
+         , ppPersistentPipeline  :: Maybe Pipeline
+         , ppFileSizeMin         :: Maybe Int64
+         , ppFileSizeLimit       :: Maybe Int64
+         , ppDetectMime          :: Maybe Bool
+         , ppMimeLimit           :: Maybe Text
+         , ppDeleteAfterDays     :: Maybe Int
+         -- ^ deleteAfterDays 的逻辑现在的文档并不记录
+         -- 但在网上的代码，及官方js-sdk的代码中都可以看到
+         -- 不确定官方是打算删除这个字段还是目前文档的错误
+         , ppFileStoreType       :: Maybe FileStoreType
+         }
+
+-- {{{1 instances
+instance ToJSON PutPolicy where
+    toJSON pp =
+        object $ catMaybes
+            [ Just $ "scope"       .= ppScope pp
+            , Just $ "saveKey"     .= fmap unResourceKey (ppSaveKey pp)
+            , Just $ "deadline"    .= (round $ utcTimeToPOSIXSeconds $ ppDeadline pp :: Int64)
+            , fmap (("isPrefixalScope" .=) . fromEnum) (ppIsPrefixalScope pp)
+            , fmap (("insertOnly" .=) . fromEnum) (ppInsertOnly pp)
+            , fmap ("endUser" .=) (ppEndUser pp)
+            , fmap ("returnUrl" .=) (ppReturnUrl pp)
+            , fmap ("returnBody" .=) (map_to_qs <$> ppReturnBody pp)
+
+            , if null cb_urls
+                 then Nothing
+                 else Just $ "callbackUrl" .= intercalate ";" cb_urls
+
+            , if null cb_urls
+                 then Nothing
+                 else fmap ("callbackHost" .=) (ppCallbackHost pp)
+
+            , if null cb_urls
+                 then Nothing
+                 else case effective_callback_body_type of
+                        CbQueryString -> fmap ("callbackBody" .=) cb_var_map_qs
+                        CbJson -> ("callbackBody" .=) . A.encodeToLazyText <$> cb_var_map_json
+
+            , if null cb_urls
+                 then Nothing
+                 else flip fmap (ppCallbackBodyType pp) $ \ t ->
+                        case t of
+                          CbQueryString -> "callbackBodyType" .= asText "application/x-www-form-urlencoded"
+                          CbJson -> "callbackBodyType" .= asText "application/json"
+
+            , case encodeFopCmdList (ppPersistentOps pp) of
+                t | not (null t) -> Just $ "persistentOps" .= t
+                  | otherwise    -> Nothing
+
+            , fmap ("persistentNotifyUrl" .=) (ppPersistentNotifyUrl pp)
+            , fmap (("persistentPipeline" .=) . unPipeline)
+                    (ppPersistentPipeline pp)
+
+            , fmap ("fsizeMin" .=) (ppFileSizeMin pp)
+            , fmap ("fsizeLimit" .=) (ppFileSizeLimit pp)
+            , fmap ("detectMime" .=) (ppDetectMime pp)
+            , fmap ("mimeLimit" .=) (ppMimeLimit pp)
+            , fmap ("deleteAfterDays" .=) (ppDeleteAfterDays pp)
+            , fmap ("fileType" .=) (fromEnum <$> ppFileStoreType pp)
+            ]
+        where
+          cb_urls = ppCallbackUrls pp
+          cb_var_map = ppCallbackBody pp
+
+          map_to_qs :: Map Text Text -> Text
+          map_to_qs m = intercalate "&" $ flip map (mapToList m) $ \ (k, v) -> k <> "=" <> v
+
+          cb_var_map_qs = map_to_qs <$> cb_var_map
+          cb_var_map_json = cb_var_map
+          effective_callback_body_type = fromMaybe CbQueryString $ ppCallbackBodyType pp
+-- }}}1
+
+
+mkPutPolicy :: MonadIO m
+            => Scope
+            -> Maybe ResourceKey    -- ^ the 'saveKey' field
+            -> NominalDiffTime
+            -> m PutPolicy
+-- {{{1
+mkPutPolicy scope save_key dt = liftIO $ do
+  now <- getCurrentTime
+  let t = addUTCTime dt now
+  return $ PutPolicy scope save_key t
+            Nothing
+            Nothing Nothing
+            Nothing Nothing
+            [] Nothing Nothing Nothing
+            [] Nothing Nothing
+            Nothing Nothing Nothing Nothing Nothing Nothing
+-- }}}1
+
+
+-- | 上传文件及抓取第三方资源都返回这样的值
+-- XXX: 实际上，根据上传策略的文档，上传结果的返回内容受 returnBody 影响
+--      读 js-sdk 代码中的node.js服务器端代码也反映了这个逻辑
+-- 所以以下这个类型只能说是未指定 returnBody 时的结果
+data UploadedFileInfo = UploadedFileInfo {
+                            ufiHash     :: EtagHash
+                            , ufiKey    :: ResourceKey
+                        }
+                        deriving (Eq, Show)
+
+$(AT.deriveJSON
+    AT.defaultOptions{AT.fieldLabelModifier = toLower . drop 3}
+    ''UploadedFileInfo)
+
+
+newtype UploadToken = UploadToken { unUploadToken :: Text }
+
+uploadToken :: SecretKey -> AccessKey -> PutPolicy -> UploadToken
+-- {{{1
+uploadToken skey akey pp =
+    UploadToken $ mconcat
+        [ unAccessKey akey
+        , ":"
+        , encoded_sign
+        , ":"
+        , decodeLatin1 $ encoded_pp
+        ]
+    where
+        encoded_pp = B64U.encode $ LB.toStrict $ A.encode pp
+        encoded_sign = decodeLatin1 $ encodedSign skey encoded_pp
+-- }}}1
+
+newtype DownloadToken = DownloadToken { unDownloadToken :: Text }
 
 type QiniuUploadMonad m a = (QiniuRemoteCallMonad m) => ReaderT (Region, UploadToken) m a
 

@@ -1,6 +1,8 @@
 module Qiniu.PersistOps
   ( PersistentId(..)
   , QiniuPfopMonad
+  , PersistFop(..), SomePersistFop(..), PersistFopSeries(..), FopCmd, encodeFopCmdList
+  , encodeFopToText'
   , SaveAs(..)
   , ImageView2Mode(..)
   , ImageView2Dim(..)
@@ -38,6 +40,7 @@ import           Data.Aeson.TH (deriveJSON, fieldLabelModifier, defaultOptions)
 import           Data.Aeson.Types (camelTo2, typeMismatch)
 import           Data.Default (Default(..))
 import qualified Data.ByteString.Char8 as C8
+import           Data.List.NonEmpty (NonEmpty(..))
 #if defined(PERSISTENT)
 import           Database.Persist (PersistField)
 import           Database.Persist.Sql (PersistFieldSql)
@@ -51,7 +54,6 @@ import Qiniu.Security
 import Qiniu.WS.Types
 import Qiniu.Utils
 -- }}}1
-
 
 
 -- | 持久化接口的接口服务器
@@ -73,13 +75,41 @@ deriving instance PersistFieldSql PersistentId
 type QiniuPfopMonad m a = (QiniuRemoteCallMonad m) => ReaderT (SecretKey, AccessKey) m a
 
 
+-- | 所有持久化数据处理指令
+class PersistFop a where
+  encodeFopToText :: a -> Text
+
+data SomePersistFop = forall a. PersistFop a => SomePersistFop a
+
+instance PersistFop SomePersistFop where
+  encodeFopToText (SomePersistFop x) = encodeFopToText x
+
+{-# DEPRECATED encodeFopToText' "use 'SaveAs' in PersistOps instead" #-}
+encodeFopToText' :: PersistFop a => a -> Maybe Entry -> Text
+-- {{{1
+encodeFopToText' x m_save_entry =
+  case m_save_entry of
+    Nothing -> s
+    Just entry -> s <> "|saveas/" <> decodeUtf8 (encodedEntryUri entry)
+  where
+    s = encodeFopToText x
+-- }}}1
+
+
+-- | 串联起来的一系列指令
+newtype PersistFopSeries = PersistFopSeries { unPersistFopSeries :: NonEmpty SomePersistFop }
+
+instance PersistFop PersistFopSeries where
+  encodeFopToText (PersistFopSeries lst) = intercalate "%7c" $ map encodeFopToText $ toList lst
+
+
 data SaveAs = SaveAs
   { saveAsEntry           :: Entry
   , saveAsDeleteAfterDays :: Maybe Int
   }
   deriving (Show)
 
--- {{{1
+-- {{{1 instances
 instance Default (Reader Entry SaveAs) where
   def = reader $ \ x -> SaveAs x Nothing
 
@@ -89,6 +119,24 @@ instance PersistFop SaveAs where
       [ Just $ "saveas/" <> encodedEntryUri saveAsEntry
       , ("/deleteAfterDays/" <>) . tshow <$> saveAsDeleteAfterDays
       ]
+-- }}}1
+
+
+type FopCmd = (SomePersistFop, Maybe SaveAs)
+
+-- | 适用于 persistentOps 字段等，但不适用于下载连接
+-- 因为下载连接属于 saveas 的同步调用
+-- https://developer.qiniu.com/dora/api/1305/processing-results-save-saveas#3
+encodeFopCmdList :: [FopCmd] -> Text
+-- {{{1
+encodeFopCmdList ops =
+  mconcat $ intersperse ";" $ map encode_ops ops
+  where
+    encode_ops (fop, m_save_as) =
+      let s1 = encodeFopToText fop
+       in case m_save_as of
+            Nothing -> s1
+            Just save_as -> s1 <> "|" <> encodeFopToText save_as
 -- }}}1
 
 
@@ -117,15 +165,21 @@ encodeImageView2Dim (ImageView2DimXY x y) = "/w/" <> tshow x <> "/h/" <> tshow y
 
 -- | 图片基本处理
 -- https://developer.qiniu.com/dora/manual/1279/basic-processing-images-imageview2
-data ImageView2 = ImageView2 ImageView2Mode ImageView2Dim
-                    (Maybe Text)  -- format
-                    (Maybe Bool)    -- 是否渐进
-                    (Maybe Int)    -- quality
-                    (Maybe Bool)    -- ignore error
+data ImageView2 = ImageView2
+  { imageView2Mode :: ImageView2Mode
+  , imageView2Dim :: ImageView2Dim
+  , imageView2Format :: Maybe Text  -- format
+  , imageView2Interlace :: Maybe Bool    -- 是否渐进
+  , imageView2Quality :: Maybe Int    -- quality
+  , imageView2IgnoreError :: Maybe Bool    -- ignore error
+  }
 
+
+-- {{{1 instances
+instance Default (Reader (ImageView2Mode, ImageView2Dim) ImageView2) where
+  def = reader $ \ (mode, dim) -> ImageView2 mode dim Nothing Nothing Nothing Nothing
 
 instance PersistFop ImageView2 where
--- {{{1
   encodeFopToText (ImageView2 mode dim m_format m_interlace m_quality m_ignore_error) =
     mconcat $ catMaybes $
       [ Just $ "imageView2" <> encodeImageView2Mode mode <> encodeImageView2Dim dim

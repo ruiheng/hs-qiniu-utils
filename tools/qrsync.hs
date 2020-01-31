@@ -39,12 +39,7 @@ import System.Exit
 import System.Directory                     (removeFile)
 import Text.Printf                          (printf)
 
-import Qiniu.Types
-import Qiniu.WS.Types
-import Qiniu.Security
-import Qiniu.ByteString
-import Qiniu.Upload
-import Qiniu.Region
+import Qiniu
 -- }}}1
 
 data RsyncOptions = RsyncOptions {
