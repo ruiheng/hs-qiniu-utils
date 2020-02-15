@@ -171,6 +171,7 @@ $(AT.deriveJSON
 
 
 newtype UploadToken = UploadToken { unUploadToken :: Text }
+  deriving (Show)
 
 uploadToken :: SecretKey -> AccessKey -> PutPolicy -> UploadToken
 -- {{{1
