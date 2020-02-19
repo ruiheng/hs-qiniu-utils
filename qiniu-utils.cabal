@@ -84,6 +84,7 @@ library
                      , time
                      , wreq
                      , lens
+                     , HTTP
                      , http-client
                      , http-types
                      , text

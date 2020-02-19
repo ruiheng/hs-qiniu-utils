@@ -13,6 +13,7 @@ import           Database.Persist.Sql (PersistFieldSql)
 #endif
 import           Data.Aeson (FromJSON, ToJSON, toJSON)
 import           Network.URI (escapeURIString)
+import           Network.HTTP (urlEncode)
 
 import Qiniu.Utils
 -- }}}1
@@ -107,6 +108,14 @@ newtype AccessToken = AccessToken { unAccessToken :: Text }
                     deriving (Eq, Ord, Show)
 
 
+class QueryStringSegment a where
+  toQsSegment :: a -> Text
+
+instance QueryStringSegment (Text, Text) where
+  toQsSegment = toQsSegment . (unpack *** unpack)
+
+instance QueryStringSegment (String, String) where
+  toQsSegment (n, v) = pack $ urlEncode n <> "=" <> urlEncode v
 
 
 logSource :: IsString a => a

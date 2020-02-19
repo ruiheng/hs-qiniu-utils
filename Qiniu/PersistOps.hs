@@ -13,6 +13,7 @@ module Qiniu.PersistOps
   , AvthumbSubOp(..)
   , AvthumbOp(..)
   , Rotation(..)
+  , AvM3u8(..), PrivateM3U8(..)
   , VFrameOp(..)
   , VSampleOp(..)
   , AvInfoAudio(..)
@@ -44,6 +45,7 @@ import           Data.Aeson.Types (camelTo2, typeMismatch)
 import           Data.Default (Default(..))
 import qualified Data.ByteString.Char8 as C8
 import           Data.List.NonEmpty (NonEmpty(..))
+import           Data.Time.Clock.POSIX
 #if defined(PERSISTENT)
 import           Database.Persist (PersistField)
 import           Database.Persist.Sql (PersistFieldSql)
@@ -335,6 +337,25 @@ instance PersistFop AvM3u8 where
       , fmap encodeFopPathPart avm3u8KeyInfo
       ]
 
+-- | 私有M3U8（pm3u8）
+-- https://developer.qiniu.com/dora/api/1292/private-m3u8-pm3u8
+data PrivateM3U8 = PrivateM3U8
+  { pm3u8TtlDeadline :: Either Int POSIXTime
+  }
+
+-- XXX: 这看上去很像 PersistFop 但只用在下载 m3u8 文件作为 QS的一段
+-- 因此我们只实现 PersistFopPathPart 接口
+instance QueryStringSegment PrivateM3U8 where
+  toQsSegment (PrivateM3U8 {..}) =
+    intercalate "/" $ catMaybes
+      [ Just "pm3u8"
+      , Just "0" -- mode
+      , Just $
+          case pm3u8TtlDeadline of
+            Left ttl -> "expires/ " <> tshow ttl
+            Right deadline -> "deadline/" <> tshow (round deadline :: Integer)
+      ]
+
 
 -- | 视频帧缩略图
 data VFrameOp = VFrameOp Text Float (Maybe VideoResolution) (Maybe Rotation)
@@ -373,7 +394,7 @@ instance PersistFop VSampleOp where
       [ Just $ "vsample/" <> format
       , Just $ "ss/" <> tshow start_time
       , Just $ "t/" <> tshow duration
-      , flip fmap m_vres $ \ res -> "s/" <> encodeFopPathPart res 
+      , flip fmap m_vres $ \ res -> "s/" <> encodeFopPathPart res
       , flip fmap m_rotate $ \ r -> "rotate/" <> encodeFopPathPart r
       , flip fmap m_interval $ \ iv -> "interval/" <> tshow iv
       , Just $ "pattern/" <> base64UrlEncodeT pattern
