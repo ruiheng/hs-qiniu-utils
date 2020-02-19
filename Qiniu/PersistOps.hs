@@ -282,7 +282,7 @@ instance PersistFop AvthumbOp where
 -- | 旋转角度的选择
 data Rotation = RotateClockwiseQuarter Int  -- ^ 顺时针转多少个象限.
               | RotateAuto
-              deriving (Show)
+              deriving (Show, Eq, Ord)
 
 
 instance PersistFopPathPart Rotation where
@@ -337,6 +337,7 @@ instance PersistFop AvM3u8 where
 
 -- | 视频帧缩略图
 data VFrameOp = VFrameOp Text Float (Maybe (Int, Int)) (Maybe Rotation)
+  deriving (Show, Eq, Ord)
 
 instance PersistFop VFrameOp where
 -- {{{1

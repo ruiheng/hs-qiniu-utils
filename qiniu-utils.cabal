@@ -102,6 +102,7 @@ library
                      , byteable
                      , base16-bytestring
                      , mime-types
+                     , hspec
 
   if flag(network-uri)
     build-depends: network-uri >= 2.6

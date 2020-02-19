@@ -22,6 +22,13 @@ spec = do
     it "returns correct result for input 2" $ do
       let save_as = SaveAs saveas_entry Nothing
       encodeFopCmdList [(fop1, Just save_as)] `shouldBe` "imageView2/1/w/400|saveas/c2F2ZV90b19idWNrZXQ6c2F2ZV90b19ya2V5"
+
+  describe "VFrameOp" $ do
+    it "can be encodeFopToText'ed correctly" $ do
+      encodeFopToText (VFrameOp "jpg" 0 Nothing Nothing) `shouldBe` "vframe/jpg/offset/0.0"
+      encodeFopToText (VFrameOp "jpg" 1.1 (Just (480, 680)) Nothing) `shouldBe` "vframe/jpg/offset/1.1/w/480/h/680"
+      encodeFopToText (VFrameOp "jpg" 1.1 (Just (480, 680)) (Just $ RotateClockwiseQuarter 1)) `shouldBe` "vframe/jpg/offset/1.1/w/480/h/680/rotate/90"
+
   where
     -- dummy_bucket = Bucket "bucket"
     -- dummy_rkey = ResourceKey "rkey"
