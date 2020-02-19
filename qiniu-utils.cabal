@@ -71,6 +71,7 @@ library
                        TupleSections
                        GADTs
                        RecordWildCards
+                       LambdaCase
 
   -- other-extensions:    
   build-depends:       base >=4 && <5

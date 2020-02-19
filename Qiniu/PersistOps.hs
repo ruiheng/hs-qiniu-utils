@@ -9,6 +9,7 @@ module Qiniu.PersistOps
   , ImageView2Dim(..)
   , ImageView2(..)
   , AvthumbFormat
+  , BitRate(..), AudioVbr(..), AudioQuality(..), VideoResolution(..)
   , AvthumbSubOp(..)
   , AvthumbOp(..)
   , Rotation(..)
@@ -227,15 +228,15 @@ instance PersistFopPathPart AudioQuality where
 
 
 -- | 视频分辨率
-data VideoResolution = VideoResWidthHeigh Int Int
+data VideoResolution = VideoResWidthHeight Int Int
                      | VideoResWidth Int
                      | VideoResHeight Int
                      deriving (Show, Eq, Ord)
 
 instance PersistFopPathPart VideoResolution where
-  encodeFopPathPart (VideoResWidthHeigh w h) = tshow w <> "x" <> tshow h
-  encodeFopPathPart (VideoResWidth w)        = tshow w <> "x"
-  encodeFopPathPart (VideoResHeight h)       = "x" <> tshow h
+  encodeFopPathPart (VideoResWidthHeight w h) = tshow w <> "x" <> tshow h
+  encodeFopPathPart (VideoResWidth w)         = tshow w <> "x"
+  encodeFopPathPart (VideoResHeight h)        = "x" <> tshow h
 
 
 -- | 音视频处理的格式参数
@@ -336,17 +337,20 @@ instance PersistFop AvM3u8 where
 
 
 -- | 视频帧缩略图
-data VFrameOp = VFrameOp Text Float (Maybe (Int, Int)) (Maybe Rotation)
+data VFrameOp = VFrameOp Text Float (Maybe VideoResolution) (Maybe Rotation)
   deriving (Show, Eq, Ord)
 
 instance PersistFop VFrameOp where
 -- {{{1
-  encodeFopToText (VFrameOp fmt offset m_size m_rotate) =
-    mconcat $ catMaybes
+  encodeFopToText (VFrameOp fmt offset m_vres m_rotate) =
+    intercalate "/" $ catMaybes
       [ Just $ "vframe/" <> fmt
-      , Just $ "/offset/" <> tshow offset
-      , flip fmap m_size $ \ (w, h) -> "/w/" <> tshow w <> "/h/" <> tshow h
-      , flip fmap m_rotate $ \ r -> "/rotate/" <> encodeFopPathPart r
+      , Just $ "offset/" <> tshow offset
+      , flip fmap m_vres $
+          \ case VideoResWidthHeight w h -> "w/" <> tshow w <> "/h/" <> tshow h
+                 VideoResWidth w         -> "w/" <> tshow w
+                 VideoResHeight h        -> "h/" <> tshow h
+      , flip fmap m_rotate $ \ r -> "rotate/" <> encodeFopPathPart r
       ]
     where
 -- }}}1
@@ -358,21 +362,21 @@ data VSampleOp = VSampleOp
                   Text    -- pattern
                   Float   -- start time
                   Float   -- duration
-                  (Maybe (Int, Int))
+                  (Maybe VideoResolution) -- doc says: <width>x<height>
                   (Maybe Rotation)
                   (Maybe Float)
 
 instance PersistFop VSampleOp where
 -- {{{1
-  encodeFopToText (VSampleOp format pattern start_time duration m_size m_rotate m_interval) =
-    mconcat $ catMaybes
+  encodeFopToText (VSampleOp format pattern start_time duration m_vres m_rotate m_interval) =
+    intercalate "/" $ catMaybes
       [ Just $ "vsample/" <> format
-      , Just $ "/ss/" <> tshow start_time
-      , Just $ "/t/" <> tshow duration
-      , flip fmap m_size $ \ (w, h) -> "/s/" <> tshow w <> "x" <> tshow h
-      , flip fmap m_rotate $ \ r -> "/rotate/" <> encodeFopPathPart r
-      , flip fmap m_interval $ \ iv -> "/interval/" <> tshow iv
-      , Just $ "/pattern/" <> base64UrlEncodeT pattern
+      , Just $ "ss/" <> tshow start_time
+      , Just $ "t/" <> tshow duration
+      , flip fmap m_vres $ \ res -> "s/" <> encodeFopPathPart res 
+      , flip fmap m_rotate $ \ r -> "rotate/" <> encodeFopPathPart r
+      , flip fmap m_interval $ \ iv -> "interval/" <> tshow iv
+      , Just $ "pattern/" <> base64UrlEncodeT pattern
       ]
 -- }}}1
 

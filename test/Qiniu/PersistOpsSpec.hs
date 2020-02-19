@@ -26,8 +26,16 @@ spec = do
   describe "VFrameOp" $ do
     it "can be encodeFopToText'ed correctly" $ do
       encodeFopToText (VFrameOp "jpg" 0 Nothing Nothing) `shouldBe` "vframe/jpg/offset/0.0"
-      encodeFopToText (VFrameOp "jpg" 1.1 (Just (480, 680)) Nothing) `shouldBe` "vframe/jpg/offset/1.1/w/480/h/680"
-      encodeFopToText (VFrameOp "jpg" 1.1 (Just (480, 680)) (Just $ RotateClockwiseQuarter 1)) `shouldBe` "vframe/jpg/offset/1.1/w/480/h/680/rotate/90"
+      encodeFopToText (VFrameOp "jpg" 1.1 (Just (VideoResWidthHeight 480 680)) Nothing) `shouldBe` "vframe/jpg/offset/1.1/w/480/h/680"
+      encodeFopToText (VFrameOp "jpg" 1.1 (Just (VideoResWidthHeight 480 680)) (Just $ RotateClockwiseQuarter 1)) `shouldBe` "vframe/jpg/offset/1.1/w/480/h/680/rotate/90"
+
+  describe "VSampleOp" $ do
+    it "can be encodeFopToText'ed correctly" $ do
+      encodeFopToText (VSampleOp "jpg" "$(count)" 1.1 2.3 Nothing Nothing Nothing)
+        `shouldBe` "vsample/jpg/ss/1.1/t/2.3/pattern/JChjb3VudCk="
+
+      encodeFopToText (VSampleOp "jpg" "$(count)" 1.1 2.3 (Just (VideoResWidthHeight 480 680)) Nothing Nothing)
+        `shouldBe` "vsample/jpg/ss/1.1/t/2.3/s/480x680/pattern/JChjb3VudCk="
 
   where
     -- dummy_bucket = Bucket "bucket"
