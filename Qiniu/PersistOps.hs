@@ -1,4 +1,5 @@
 module Qiniu.PersistOps
+-- {{{1 exports
   ( PersistentId(..)
   , QiniuPfopMonad
   , PersistFop(..), SomePersistFop(..), PersistFopSeries(..), FopCmd, encodeFopCmdList
@@ -29,6 +30,7 @@ module Qiniu.PersistOps
   , persistOpsOnSaved
   , persistOpsQuery
   ) where
+-- }}}1
 
 -- {{{1 imports
 import           ClassyPrelude
@@ -78,6 +80,9 @@ type QiniuPfopMonad m a = (QiniuRemoteCallMonad m) => ReaderT (SecretKey, Access
 -- | 所有持久化数据处理指令
 class PersistFop a where
   encodeFopToText :: a -> Text
+
+class PersistFopPathPart a where
+  encodeFopPathPart :: a -> Text
 
 data SomePersistFop = forall a. PersistFop a => SomePersistFop a
 
@@ -194,39 +199,75 @@ instance PersistFop ImageView2 where
 -- }}}1
 
 
+-- | 码率: 128k, 1m, etc
+data BitRate = BitRateK Int
+              | BitRateM Int
+              deriving (Show, Eq, Ord)
+
+instance PersistFopPathPart BitRate where
+  encodeFopPathPart (BitRateK i) = tshow i <> "k"
+  encodeFopPathPart (BitRateM i) = tshow i <> "m"
+
+
+-- | 音频质量，取值范围为0-9（mp3），10-500（aac），仅支持mp3和aac，值越小越高。不能与上述码率参数共用。
+newtype AudioVbr = AudioVbr Int
+  deriving (Show, Eq, Ord)
+
+instance PersistFopPathPart AudioVbr where
+  encodeFopPathPart (AudioVbr i) = tshow i
+
+-- /ab/<BitRate> or /aq/<AudioQuality>
+data AudioQuality = AudioQualityCbr BitRate
+                  | AudioQualityVbr AudioVbr
+                  deriving (Show, Eq, Ord)
+
+instance PersistFopPathPart AudioQuality where
+  encodeFopPathPart (AudioQualityCbr br) = "ab/" <> encodeFopPathPart br
+  encodeFopPathPart (AudioQualityVbr q) = "aq/" <> encodeFopPathPart q
+
+
+-- | 视频分辨率
+data VideoResolution = VideoResWidthHeigh Int Int
+                     | VideoResWidth Int
+                     | VideoResHeight Int
+                     deriving (Show, Eq, Ord)
+
+instance PersistFopPathPart VideoResolution where
+  encodeFopPathPart (VideoResWidthHeigh w h) = tshow w <> "x" <> tshow h
+  encodeFopPathPart (VideoResWidth w)        = tshow w <> "x"
+  encodeFopPathPart (VideoResHeight h)       = "x" <> tshow h
+
+
 -- | 音视频处理的格式参数
 type AvthumbFormat = Text
 
 -- | 音视频处理
-data AvthumbSubOp = AvthumbOpAudioBitRate Int        -- ^ /ab/<BitRate>k
-                  | AvthumbOpAudioQuality Int   -- ^ /aq/<AudioQuality>
+data AvthumbSubOp = AvthumbOpAudioQuality AudioQuality     -- ^ /aq/<AudioQuality>
                   | AvthumbOpSamplingRate Int   -- ^ 采样频率，单位HZ
                   | AvthumbOpFrameRate Int      -- ^ 视频帧率
-                  | AvthumbOpVideoBitRate Int   -- ^ 视频码率 kHz
+                  | AvthumbOpVideoBitRate BitRate -- ^ 视频码率
                   | AvthumbOpVideoCodec Text    -- ^ 视频编码格式
                   | AvthumbOpAudioCodec Text    -- ^ 编码方案．如 libx264
                   | AvthumbOpSubtitleCodec Text -- ^ 字幕编码方案
-                  | AvthumbOpVideoResolution (Either (Int, Int) Text)  -- ^ 视频分辨率
+                  | AvthumbOpVideoResolution VideoResolution  -- ^ 视频分辨率
                   | AvthumbOpVideoAutoscale Bool -- ^ 视频是否按原比例缩放
                   | AvthumbOpStripMeta Bool     -- ^ 是否去除 meta 信息
                   | AvthumbOpNoSubtitle Bool    -- ^ 是否去除字幕
   deriving (Show, Eq, Ord)
 
-encodeAvthumbOpAsPath :: AvthumbSubOp -> Text
+instance PersistFopPathPart AvthumbSubOp where
 -- {{{1
-encodeAvthumbOpAsPath (AvthumbOpAudioBitRate k)               = "ab/" <> tshow k <> "k"
-encodeAvthumbOpAsPath (AvthumbOpAudioQuality q)               = "aq/" <> tshow q
-encodeAvthumbOpAsPath (AvthumbOpSamplingRate r)               = "ar/" <> tshow r
-encodeAvthumbOpAsPath (AvthumbOpAudioCodec c)                 = "acodec/" <> c
-encodeAvthumbOpAsPath (AvthumbOpFrameRate r)                  = "r/" <> tshow r
-encodeAvthumbOpAsPath (AvthumbOpVideoBitRate r)               = "vb/" <> tshow r <> "k"
-encodeAvthumbOpAsPath (AvthumbOpVideoCodec t)                 = "vcodec/" <> t
-encodeAvthumbOpAsPath (AvthumbOpSubtitleCodec t)              = "scodec/" <> t
-encodeAvthumbOpAsPath (AvthumbOpVideoResolution (Left (x,y))) = "s/" <> tshow x <> "x" <> tshow y
-encodeAvthumbOpAsPath (AvthumbOpVideoResolution (Right n))    = "s/" <> n
-encodeAvthumbOpAsPath (AvthumbOpVideoAutoscale b)             = "autoscale/" <> if b then "1" else "0"
-encodeAvthumbOpAsPath (AvthumbOpStripMeta b)                  = "stripmeta/" <> if b then "1" else "0"
-encodeAvthumbOpAsPath (AvthumbOpNoSubtitle b)                 = "sn/" <> if b then "1" else "0"
+  encodeFopPathPart (AvthumbOpAudioQuality q)               = encodeFopPathPart q
+  encodeFopPathPart (AvthumbOpSamplingRate r)               = "ar/" <> tshow r
+  encodeFopPathPart (AvthumbOpAudioCodec c)                 = "acodec/" <> c
+  encodeFopPathPart (AvthumbOpFrameRate r)                  = "r/" <> tshow r
+  encodeFopPathPart (AvthumbOpVideoBitRate r)               = "vb/" <> encodeFopPathPart r
+  encodeFopPathPart (AvthumbOpVideoCodec t)                 = "vcodec/" <> t
+  encodeFopPathPart (AvthumbOpSubtitleCodec t)              = "scodec/" <> t
+  encodeFopPathPart (AvthumbOpVideoResolution vr)           = "s/" <> encodeFopPathPart vr
+  encodeFopPathPart (AvthumbOpVideoAutoscale b)             = "autoscale/" <> if b then "1" else "0"
+  encodeFopPathPart (AvthumbOpStripMeta b)                  = "stripmeta/" <> if b then "1" else "0"
+  encodeFopPathPart (AvthumbOpNoSubtitle b)                 = "sn/" <> if b then "1" else "0"
 -- }}}1
 
 
@@ -235,7 +276,7 @@ data AvthumbOp = AvthumbOp AvthumbFormat [AvthumbSubOp]
 
 instance PersistFop AvthumbOp where
   encodeFopToText (AvthumbOp format sub_ops) =
-    mconcat $ intersperse "/" $ ("avthumb/" <> format) : map encodeAvthumbOpAsPath (sort sub_ops)
+    mconcat $ intersperse "/" $ ("avthumb/" <> format) : map encodeFopPathPart (sort sub_ops)
 
 
 -- | 旋转角度的选择
@@ -244,13 +285,54 @@ data Rotation = RotateClockwiseQuarter Int  -- ^ 顺时针转多少个象限.
               deriving (Show)
 
 
-encRotation :: Rotation -> Text
-encRotation (RotateClockwiseQuarter q)  = if q < 0
-                                            then encRotation RotateAuto
-                                            else case (q `rem` 4) of
-                                                   qq | qq == 0 -> encRotation RotateAuto
-                                                      | otherwise -> tshow (90 * qq)
-encRotation RotateAuto                  = "auto"
+instance PersistFopPathPart Rotation where
+  encodeFopPathPart (RotateClockwiseQuarter q)  = if q < 0
+                                                     then encodeFopPathPart RotateAuto
+                                                     else case (q `rem` 4) of
+                                                            qq | qq == 0 -> encodeFopPathPart RotateAuto
+                                                               | otherwise -> tshow (90 * qq)
+  encodeFopPathPart RotateAuto                  = "auto"
+
+
+-- | 生成m3u8
+-- 虽然这命令以 avthumb 开头，但跟 AvthumbOp 相差太远
+-- https://developer.qiniu.com/dora/api/1485/audio-and-video-slice
+data AvM3u8 = AvM3u8
+  { avm3u8Domain          :: Maybe Text
+  , avm3u8AudioCbrVbr     :: Maybe AudioQuality
+  , avm3u8SegmentSeconds  :: Maybe Int
+  , avm3u8VideoResolution :: Maybe VideoResolution
+  , avm3u8KeyInfo         :: Maybe HlsKeyInfo
+  }
+
+data HlsKeyInfo = HlsKeyInfo
+  { hlsKeyBytes :: ByteString
+  -- ^ must be 16 bytes
+  , hlsKeyGetUrl :: Text
+  -- ^ URL that can return the key
+  -- 暂时不支持加密key本身
+  }
+
+instance PersistFopPathPart HlsKeyInfo where
+  encodeFopPathPart (HlsKeyInfo {..}) =
+    intercalate "/" $
+      [ "hlsKey/" <> base64UrlEncode hlsKeyBytes
+      , "hlsKeyUrl/" <> base64UrlEncodeT hlsKeyGetUrl
+      ]
+
+instance PersistFop AvM3u8 where
+  encodeFopToText (AvM3u8 {..}) =
+    intercalate "/" $ catMaybes
+      [ Just $ "avthumb/m3u8"
+      , Just $ case avm3u8Domain of
+                 Nothing -> "noDomain/1"
+                 Just domain -> "domain/" <> base64UrlEncodeT domain
+
+      , fmap encodeFopPathPart avm3u8AudioCbrVbr
+      , flip fmap avm3u8SegmentSeconds $ \ t -> "segtime/" <> tshow t
+      , flip fmap avm3u8VideoResolution $ \ x -> "s/" <> encodeFopPathPart x
+      , fmap encodeFopPathPart avm3u8KeyInfo
+      ]
 
 
 -- | 视频帧缩略图
@@ -263,7 +345,7 @@ instance PersistFop VFrameOp where
       [ Just $ "vframe/" <> fmt
       , Just $ "/offset/" <> tshow offset
       , flip fmap m_size $ \ (w, h) -> "/w/" <> tshow w <> "/h/" <> tshow h
-      , flip fmap m_rotate $ \ r -> "/rotate/" <> encRotation r
+      , flip fmap m_rotate $ \ r -> "/rotate/" <> encodeFopPathPart r
       ]
     where
 -- }}}1
@@ -287,7 +369,7 @@ instance PersistFop VSampleOp where
       , Just $ "/ss/" <> tshow start_time
       , Just $ "/t/" <> tshow duration
       , flip fmap m_size $ \ (w, h) -> "/s/" <> tshow w <> "x" <> tshow h
-      , flip fmap m_rotate $ \ r -> "/rotate/" <> encRotation r
+      , flip fmap m_rotate $ \ r -> "/rotate/" <> encodeFopPathPart r
       , flip fmap m_interval $ \ iv -> "/interval/" <> tshow iv
       , Just $ "/pattern/" <> base64UrlEncodeT pattern
       ]
