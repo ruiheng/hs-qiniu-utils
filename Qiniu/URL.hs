@@ -123,46 +123,46 @@ resourceDownloadUrlX if_ssl m_domain (bucket, rkey) m_qs m_secret_cmds =
 
 
 resourceDownloadUrlByConfig :: IsString s
-                            => QiniuConfig
+                            => QiniuBucketConfig
                             -> ResourceKey
                             -> s
 -- {{{1
 resourceDownloadUrlByConfig qc rkey =
-  resourceDownloadUrl (qiniuConfigSslUrl qc) m_domain bucket rkey
+  resourceDownloadUrl (qnBucketSslUrl qc) m_domain bucket rkey
   where
-    m_domain = qiniuConfigDomain qc
-    bucket = qiniuConfigBucket qc
+    m_domain = qnBucketDomain qc
+    bucket = qnBucketName qc
 -- }}}1
 
 
 resourceDownloadUrlByConfig' :: IsString s
-                             => QiniuConfig
+                             => QiniuBucketConfig
                              -> ResourceKey
                              -> Maybe String     -- ^ optional query string
                              -> s
 -- {{{1
 resourceDownloadUrlByConfig' qc rkey m_qs =
-  resourceDownloadUrl' (qiniuConfigSslUrl qc) m_domain bucket rkey m_qs
+  resourceDownloadUrl' (qnBucketSslUrl qc) m_domain bucket rkey m_qs
   where
-    m_domain = qiniuConfigDomain qc
-    bucket = qiniuConfigBucket qc
+    m_domain = qnBucketDomain qc
+    bucket = qnBucketName qc
 -- }}}1
 
 
 resourceDownloadUrlByPubConfig :: IsString s
-                               => QiniuDualConfig
+                               => QiniuDualBucketConfig
                                -> ResourceKey
                                -> s
 resourceDownloadUrlByPubConfig dual =
-  resourceDownloadUrlByConfig (pubOfQiniuDualConfig dual)
+  resourceDownloadUrlByConfig (pubOfQiniuDualBucketConfig dual)
 
 
 resourceDownloadUrlByPubConfig' :: IsString s
-                                => QiniuDualConfig
+                                => QiniuDualBucketConfig
                                 -> ResourceKey
                                 -> Maybe String     -- ^ optional query string
                                 -> s
-resourceDownloadUrlByPubConfig' dual = resourceDownloadUrlByConfig' (pubOfQiniuDualConfig dual)
+resourceDownloadUrlByPubConfig' dual = resourceDownloadUrlByConfig' (pubOfQiniuDualBucketConfig dual)
 
 
 authedDownloadUrl :: SecretKey
@@ -238,21 +238,22 @@ authedResourceDownloadUrlX skey akey expiry if_ssl m_domain entry m_qs m_cmds =
   authedDownloadUrl skey akey expiry $ resourceDownloadUrlX if_ssl m_domain entry m_qs (fmap ((skey, akey),) m_cmds)
 
 
-authedResourceDownloadUrlByConfig :: QiniuConfig
+authedResourceDownloadUrlByConfig :: QiniuAccountConfig
+                                  -> QiniuBucketConfig
                                   -> UTCTime
                                   -> ResourceKey
                                   -> Maybe String
                                   -> Text
 -- {{{1
-authedResourceDownloadUrlByConfig qc expiry rkey m_qs =
+authedResourceDownloadUrlByConfig qa qc expiry rkey m_qs =
   authedResourceDownloadUrl' skey akey expiry if_ssl m_domain bucket rkey' m_qs
   where
-    skey = qiniuConfigSecretKey qc
-    akey = qiniuConfigAccessKey qc
-    bucket = qiniuConfigBucket qc
-    if_ssl = qiniuConfigSslUrl qc
-    m_domain = qiniuConfigDomain qc
-    rkey' = case qiniuConfigPathPrefix qc of
+    skey = qnAccountSecretKey qa
+    akey = qnAccountAccessKey qa
+    bucket = qnBucketName qc
+    if_ssl = qnBucketSslUrl qc
+    m_domain = qnBucketDomain qc
+    rkey' = case qnBucketPathPrefix qc of
               p | not (null p) -> ResourceKey $ p <> "/" <> unResourceKey rkey
                 | otherwise -> rkey
 -- }}}1

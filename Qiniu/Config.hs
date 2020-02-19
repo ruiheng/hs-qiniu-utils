@@ -10,68 +10,66 @@ import Qiniu.Types
 -- }}}1
 
 
-data QiniuConfig =
-       QiniuConfig
-         { qiniuConfigSecretKey  :: SecretKey
-         , qiniuConfigAccessKey  :: AccessKey
-         , qiniuConfigBucket     :: Bucket
-         , qiniuConfigDomain     :: Maybe Text
-         , qiniuConfigSslUrl     :: Bool
-         , qiniuConfigRegion     :: Region
-         , qiniuConfigPathPrefix :: Text
-         -- ^ 把 resource key 当路径用时，总是加上这段路径前缀
-         }
+check_non_empty_str :: (MonoFoldable a, MonadPlus m) => a -> m a
+check_non_empty_str s = if null s then mzero else return s
+
+data QiniuAccountConfig = QiniuAccountConfig
+  { qnAccountSecretKey :: SecretKey
+  , qnAccountAccessKey :: AccessKey
+  }
+
+instance FromJSON QiniuAccountConfig where
+  parseJSON = withObject "QiniuAccountConfig" $ \o ->
+    QiniuAccountConfig
+      <$> (fmap SecretKey $ o .: "secret-key" >>= check_non_empty_str)
+      <*> (fmap AccessKey $ o .: "access-key" >>= check_non_empty_str)
+
+
+data QiniuBucketConfig = QiniuBucketConfig
+  { qnBucketName       :: Bucket
+  , qnBucketDomain     :: Maybe Text
+  , qnBucketSslUrl     :: Bool
+  , qnBucketRegion     :: Region
+  , qnBucketPathPrefix :: Text
+  -- ^ 把 resource key 当路径用时，总是加上这段路径前缀
+  }
   deriving (Eq, Show)
 
 -- {{{1 instances
-instance FromJSON QiniuConfig where
-    parseJSON = withObject "QiniuConfig" $ \o ->
-        QiniuConfig
-            <$> (fmap (SecretKey . fromString) $
-                                        o .: "secret-key" >>= check_non_empty_str)
-            <*> (fmap (AccessKey . fromString) $
-                                        o .: "access-key" >>= check_non_empty_str)
-            <*> (fmap (Bucket . fromString) $
-                                        o .: "bucket" >>= check_non_empty_str)
+instance FromJSON QiniuBucketConfig where
+    parseJSON = withObject "QiniuBucketConfig" $ \o ->
+        QiniuBucketConfig
+            <$> (fmap Bucket $ o .: "bucket" >>= check_non_empty_str)
             <*> ( fmap nullToMaybe $ o .:? "domain" )
             <*> ( o .:? "ssl-url" .!= False)
             <*> o .: "region"
             <*> ( fmap (fromMaybe "") $ o .:? "path-prefix" )
         where
-            check_non_empty_str s = if null s then mzero else return s
-
             nullToMaybe Nothing = Nothing
             nullToMaybe (Just x) = if null x then Nothing else Just x
 -- }}}1
 
 
 -- | 包含一个公开 bucket, 一个私有 bucket 的设置
-data QiniuDualConfig =
-       QiniuDualConfig
-         { qcDualSecretKey     :: SecretKey
-         , qcDualAccessKey     :: AccessKey
-         , qcDualPublicBucket  :: Bucket
-         , qcDualPublicDomain  :: Maybe Text
-         , qcDualPublicSslUrl  :: Bool
-         , qcDualPublicRegion  :: Region
-         , qcDualPublicPathPrefix :: Text
-         , qcDualPrivateBucket :: Bucket
-         , qcDualPrivateDomain :: Maybe Text
-         , qcDualPrivateSslUrl :: Bool
-         , qcDualPrivateRegion :: Region
-         , qcDualPrivatePathPrefix :: Text
-         }
+data QiniuDualBucketConfig = QiniuDualBucketConfig
+  { qcDualPublicBucket  :: Bucket
+  , qcDualPublicDomain  :: Maybe Text
+  , qcDualPublicSslUrl  :: Bool
+  , qcDualPublicRegion  :: Region
+  , qcDualPublicPathPrefix :: Text
+  , qcDualPrivateBucket :: Bucket
+  , qcDualPrivateDomain :: Maybe Text
+  , qcDualPrivateSslUrl :: Bool
+  , qcDualPrivateRegion :: Region
+  , qcDualPrivatePathPrefix :: Text
+  }
   deriving (Eq, Show)
 
 -- {{{1 instances
-instance FromJSON QiniuDualConfig where
-    parseJSON = withObject "QiniuDualConfig" $ \o ->
-        QiniuDualConfig
-            <$> (fmap (SecretKey . fromString) $
-                                        o .: "secret-key" >>= check_non_empty_str)
-            <*> (fmap (AccessKey . fromString) $
-                                        o .: "access-key" >>= check_non_empty_str)
-            <*> (fmap (Bucket . fromString) $
+instance FromJSON QiniuDualBucketConfig where
+    parseJSON = withObject "QiniuDualBucketConfig" $ \o ->
+        QiniuDualBucketConfig
+            <$> (fmap (Bucket . fromString) $
                                         o .: "public-bucket" >>= check_non_empty_str)
             <*> ( fmap nullToMaybe $ o .:? "public-domain" )
             <*> ( o .:? "public-ssl-url" .!= False )
@@ -84,37 +82,27 @@ instance FromJSON QiniuDualConfig where
             <*> (o .: "private-region" <|> o .: "region")
             <*> ( fmap (fromMaybe "") $ liftM2 (<|>) (o .:? "private-path-prefix") (o .:? "path-prefix") )
         where
-            check_non_empty_str s = if null s then mzero else return s
-
             nullToMaybe Nothing = Nothing
             nullToMaybe (Just x) = if null x then Nothing else Just x
 -- }}}1
 
 
-pubOfQiniuDualConfig :: QiniuDualConfig -> QiniuConfig
--- {{{1
-pubOfQiniuDualConfig qc = QiniuConfig
-                            (qcDualSecretKey qc)
-                            (qcDualAccessKey qc)
-                            (qcDualPublicBucket qc)
-                            (qcDualPublicDomain qc)
-                            (qcDualPublicSslUrl qc)
-                            (qcDualPublicRegion qc)
-                            (qcDualPublicPathPrefix qc)
--- }}}1
+pubOfQiniuDualBucketConfig :: QiniuDualBucketConfig -> QiniuBucketConfig
+pubOfQiniuDualBucketConfig qc = QiniuBucketConfig
+                                  (qcDualPublicBucket qc)
+                                  (qcDualPublicDomain qc)
+                                  (qcDualPublicSslUrl qc)
+                                  (qcDualPublicRegion qc)
+                                  (qcDualPublicPathPrefix qc)
 
 
-priOfQiniuDualConfig :: QiniuDualConfig -> QiniuConfig
--- {{{1
-priOfQiniuDualConfig qc = QiniuConfig
-                            (qcDualSecretKey qc)
-                            (qcDualAccessKey qc)
-                            (qcDualPrivateBucket qc)
-                            (qcDualPrivateDomain qc)
-                            (qcDualPrivateSslUrl qc)
-                            (qcDualPrivateRegion qc)
-                            (qcDualPrivatePathPrefix qc)
--- }}}1
+priOfQiniuDualBucketConfig :: QiniuDualBucketConfig -> QiniuBucketConfig
+priOfQiniuDualBucketConfig qc = QiniuBucketConfig
+                                  (qcDualPrivateBucket qc)
+                                  (qcDualPrivateDomain qc)
+                                  (qcDualPrivateSslUrl qc)
+                                  (qcDualPrivateRegion qc)
+                                  (qcDualPrivatePathPrefix qc)
 
 
 
