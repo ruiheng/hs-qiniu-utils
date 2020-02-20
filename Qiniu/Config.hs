@@ -40,7 +40,7 @@ data QiniuBucketConfig = QiniuBucketConfig
 instance FromJSON QiniuBucketConfig where
     parseJSON = withObject "QiniuBucketConfig" $ \o ->
         QiniuBucketConfig
-            <$> (fmap Bucket $ o .: "bucket" >>= check_non_empty_str)
+            <$> (fmap Bucket $ o .: "name" >>= check_non_empty_str)
             <*> ( fmap nullToMaybe $ o .:? "domain" )
             <*> ( o .:? "ssl-url" .!= False)
             <*> o .: "region"
