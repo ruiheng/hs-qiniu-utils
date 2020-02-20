@@ -7,6 +7,7 @@ import Data.Aeson
 
 import Qiniu.Region
 import Qiniu.Types
+import Qiniu.Class
 -- }}}1
 
 
@@ -47,6 +48,8 @@ instance FromJSON QiniuBucketConfig where
         where
             nullToMaybe Nothing = Nothing
             nullToMaybe (Just x) = if null x then Nothing else Just x
+
+instance HasBucket QiniuBucketConfig where getBucket = qnBucketName
 -- }}}1
 
 
