@@ -56,6 +56,7 @@ import           Network.Wreq               (defaults, param, FormParam((:=)))
 import qualified Network.Wreq.Session       as WS
 
 import Qiniu.Types
+import Qiniu.Class
 import Qiniu.Security
 import Qiniu.WS.Types
 import Qiniu.Utils
@@ -676,6 +677,12 @@ instance FromJSON PersistOpInfo where
                     <*> o .: "items"
                     <*> o .: "pipeline"
                     <*> o .: "reqid"
+
+instance HasBucket PersistOpInfo where
+  getBucket = pfopInfoInputBucket
+
+instance HasResourceKey PersistOpInfo where
+  getResourceKey = pfopInfoInputKey
 -- }}}1
 
 
@@ -702,6 +709,12 @@ instance FromJSON PfopInfoItem where
                    <*> o .: "hash"
                    <*> o .: "key"
                    <*> (fmap (/= (0 :: Int)) $ o .: "returnOld")
+
+instance HasResourceKey PfopInfoItem where
+  getResourceKey = pfopInfoItemKey
+
+instance HasEtagHash PfopInfoItem where
+  getEtagHash = pfopInfoItemHash
 -- }}}1
 
 -- | 持久化处理状态查询
