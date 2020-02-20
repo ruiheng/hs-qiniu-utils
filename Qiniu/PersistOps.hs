@@ -36,12 +36,13 @@ module Qiniu.PersistOps
 
 -- {{{1 imports
 import           ClassyPrelude
-import           Control.Lens
+import           Control.Lens hiding (Choice)
 import           Control.Monad.Reader
 import           Control.Monad.Except (runExceptT, ExceptT(..))
 import           Data.Aeson
 import           Data.Aeson.TH (deriveJSON, fieldLabelModifier, defaultOptions)
 import           Data.Aeson.Types (camelTo2, typeMismatch)
+import           Data.Choice
 import           Data.Default (Default(..))
 import qualified Data.ByteString.Char8 as C8
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -135,10 +136,10 @@ type FopCmd = (SomePersistFop, Maybe SaveAs)
 -- | 适用于 persistentOps 字段等，但不适用于下载连接
 -- 因为下载连接属于 saveas 的同步调用
 -- https://developer.qiniu.com/dora/api/1305/processing-results-save-saveas#3
-encodeFopCmdList :: [FopCmd] -> Text
+encodeFopCmdList :: NonEmpty FopCmd -> Text
 -- {{{1
 encodeFopCmdList ops =
-  mconcat $ intersperse ";" $ map encode_ops ops
+  mconcat $ intersperse ";" $ toList $ map encode_ops ops
   where
     encode_ops (fop, m_save_as) =
       let s1 = encodeFopToText fop
@@ -307,6 +308,9 @@ data AvM3u8 = AvM3u8
   , avm3u8VideoResolution :: Maybe VideoResolution
   , avm3u8KeyInfo         :: Maybe HlsKeyInfo
   }
+
+instance Default AvM3u8 where
+  def = AvM3u8 def def def def def
 
 data HlsKeyInfo = HlsKeyInfo
   { hlsKeyBytes :: ByteString
@@ -559,11 +563,11 @@ instance FromJSON PfopResp where
 
 
 -- | 对已有的资源执行持久化数据处理
-persistOpsOnSaved :: [FopCmd]
+persistOpsOnSaved :: NonEmpty FopCmd
                   -> Entry          -- ^ input resource
                   -> Maybe Text     -- ^ notify url
                   -> Maybe Pipeline -- ^ pipeline
-                  -> Bool
+                  -> Choice "force"
                   -> QiniuPfopMonad m (WsResult PersistentId)
 -- {{{1
 persistOpsOnSaved ops (bucket, rkey) m_notify_url m_pipeline forced = runExceptT $ do
@@ -581,7 +585,7 @@ persistOpsOnSaved ops (bucket, rkey) m_notify_url m_pipeline forced = runExceptT
                   , Just $ "fops" := fops_cmd
                   , flip fmap m_notify_url $ \ x -> "notifyURL" := x
                   , flip fmap m_pipeline $ \ pl -> "pipeline" := unPipeline pl
-                  , if forced
+                  , if toBool forced
                        then Just $ "force" := ("1" :: String)
                        else Nothing
                   ]

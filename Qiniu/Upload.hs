@@ -8,6 +8,7 @@ module Qiniu.Upload where
 
 -- {{{1 imports
 import           ClassyPrelude
+import           Data.List.NonEmpty (nonEmpty)
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Char8 as C8
@@ -108,9 +109,7 @@ instance ToJSON PutPolicy where
                           CbQueryString -> "callbackBodyType" .= asText "application/x-www-form-urlencoded"
                           CbJson -> "callbackBodyType" .= asText "application/json"
 
-            , case encodeFopCmdList (ppPersistentOps pp) of
-                t | not (null t) -> Just $ "persistentOps" .= t
-                  | otherwise    -> Nothing
+            , ("persistentOps" .=) . encodeFopCmdList <$> nonEmpty (ppPersistentOps pp)
 
             , fmap ("persistentNotifyUrl" .=) (ppPersistentNotifyUrl pp)
             , fmap (("persistentPipeline" .=) . unPipeline)
