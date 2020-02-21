@@ -393,7 +393,7 @@ instance QueryStringSegment PrivateM3U8 where
       , Just "0" -- mode
       , Just $
           case pm3u8TtlDeadline of
-            Left ttl -> "expires/ " <> tshow ttl
+            Left ttl -> "expires/" <> tshow ttl
             Right deadline -> "deadline/" <> tshow (round deadline :: Integer)
       ]
 
