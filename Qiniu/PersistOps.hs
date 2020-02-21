@@ -9,11 +9,11 @@ module Qiniu.PersistOps
   , ImageView2Dim(..)
   , ImageView2(..)
   , AvthumbFormat
-  , BitRate(..), AudioVbr(..), AudioQuality(..), VideoResolution(..)
+  , BitRate(..), AudioCodec(..), AudioVbr(..), AudioQuality(..), VideoCodec(..), VideoResolution(..)
   , AvthumbSubOp(..)
   , AvthumbOp(..)
   , Rotation(..)
-  , AvM3u8(..), PrivateM3U8(..)
+  , AvM3u8(..), PrivateM3U8(..), HlsKeyInfo (..)
   , VFrameOp(..)
   , VSampleOp(..)
   , AvInfoAudio(..)
@@ -231,6 +231,38 @@ instance PersistFopPathPart AudioQuality where
   encodeFopPathPart (AudioQualityVbr q) = "aq/" <> encodeFopPathPart q
 
 
+-- | 音频编码方案
+-- 并不完整，每个指令是否能支持所有下面页面声称支持的编码也不明确
+-- 所以只定义了最早期文档就出现的三种，同时应该是最常用的
+-- https://developer.qiniu.com/dora/kb/1432/avthumb-parameter-acodec-format-and-explanation
+--
+-- CAUTION:
+-- 音频质量使用 VBR时，文档说仅支持 mp3 aac
+data AudioCodec = AudioMp3
+                | AudioAac
+                | AudioVorbis
+                deriving (Show, Eq, Ord)
+
+instance PersistFopPathPart AudioCodec where
+  encodeFopPathPart AudioMp3    = "libmp3lame"
+  encodeFopPathPart AudioAac    = "libfaac"
+  encodeFopPathPart AudioVorbis = "libvorbis"
+
+
+-- | 视频编码方案
+-- 类似 AudioCodec，这也是不完整的列表
+-- https://developer.qiniu.com/dora/kb/1385/avthumb-parameter-vcodec-format-and-explanation
+-- see also:
+-- https://video.stackexchange.com/questions/10071/what-is-the-most-compatible-compression-codec-to-in-handbrake-use-for-video-that
+data VideoCodec = VideoH264
+                | VideoVp8
+                deriving (Show, Eq, Ord)
+
+instance PersistFopPathPart VideoCodec where
+  encodeFopPathPart VideoH264 = "libx264"
+  encodeFopPathPart VideoVp8  = "libvpx"
+
+
 -- | 视频分辨率
 data VideoResolution = VideoResWidthHeight Int Int
                      | VideoResWidth Int
@@ -251,8 +283,8 @@ data AvthumbSubOp = AvthumbOpAudioQuality AudioQuality     -- ^ /aq/<AudioQualit
                   | AvthumbOpSamplingRate Int   -- ^ 采样频率，单位HZ
                   | AvthumbOpFrameRate Int      -- ^ 视频帧率
                   | AvthumbOpVideoBitRate BitRate -- ^ 视频码率
-                  | AvthumbOpVideoCodec Text    -- ^ 视频编码格式
-                  | AvthumbOpAudioCodec Text    -- ^ 编码方案．如 libx264
+                  | AvthumbOpVideoCodec VideoCodec    -- ^ 视频编码格式
+                  | AvthumbOpAudioCodec AudioCodec    -- ^ 编码方案．如 libx264
                   | AvthumbOpSubtitleCodec Text -- ^ 字幕编码方案
                   | AvthumbOpVideoResolution VideoResolution  -- ^ 视频分辨率
                   | AvthumbOpVideoAutoscale Bool -- ^ 视频是否按原比例缩放
@@ -264,10 +296,10 @@ instance PersistFopPathPart AvthumbSubOp where
 -- {{{1
   encodeFopPathPart (AvthumbOpAudioQuality q)               = encodeFopPathPart q
   encodeFopPathPart (AvthumbOpSamplingRate r)               = "ar/" <> tshow r
-  encodeFopPathPart (AvthumbOpAudioCodec c)                 = "acodec/" <> c
+  encodeFopPathPart (AvthumbOpAudioCodec c)                 = "acodec/" <> encodeFopPathPart c
   encodeFopPathPart (AvthumbOpFrameRate r)                  = "r/" <> tshow r
   encodeFopPathPart (AvthumbOpVideoBitRate r)               = "vb/" <> encodeFopPathPart r
-  encodeFopPathPart (AvthumbOpVideoCodec t)                 = "vcodec/" <> t
+  encodeFopPathPart (AvthumbOpVideoCodec c)                 = "vcodec/" <> encodeFopPathPart c
   encodeFopPathPart (AvthumbOpSubtitleCodec t)              = "scodec/" <> t
   encodeFopPathPart (AvthumbOpVideoResolution vr)           = "s/" <> encodeFopPathPart vr
   encodeFopPathPart (AvthumbOpVideoAutoscale b)             = "autoscale/" <> if b then "1" else "0"
@@ -306,12 +338,14 @@ data AvM3u8 = AvM3u8
   { avm3u8Domain          :: Maybe Text
   , avm3u8AudioCbrVbr     :: Maybe AudioQuality
   , avm3u8SegmentSeconds  :: Maybe Int
+  , avm3u8VideoCodec      :: Maybe VideoCodec
+  , avm3u8AudioCodec      :: Maybe AudioCodec
   , avm3u8VideoResolution :: Maybe VideoResolution
   , avm3u8KeyInfo         :: Maybe HlsKeyInfo
   }
 
 instance Default AvM3u8 where
-  def = AvM3u8 def def def def def
+  def = AvM3u8 def def def def def def def
 
 data HlsKeyInfo = HlsKeyInfo
   { hlsKeyBytes :: ByteString
@@ -339,6 +373,8 @@ instance PersistFop AvM3u8 where
       , fmap encodeFopPathPart avm3u8AudioCbrVbr
       , flip fmap avm3u8SegmentSeconds $ \ t -> "segtime/" <> tshow t
       , flip fmap avm3u8VideoResolution $ \ x -> "s/" <> encodeFopPathPart x
+      , ("vcodec/" <>) . encodeFopPathPart <$> avm3u8VideoCodec
+      , ("acodec/" <>) . encodeFopPathPart <$> avm3u8AudioCodec
       , fmap encodeFopPathPart avm3u8KeyInfo
       ]
 
