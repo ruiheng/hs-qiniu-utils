@@ -724,13 +724,13 @@ instance HasResourceKey PersistOpInfo where
 
 data PfopInfoItem =
        PfopInfoItem
-         { pfopInfoItemCmd :: Text
-         , pfopInfoItemStatus :: PersistOpStatus
+         { pfopInfoItemCmd        :: Text
+         , pfopInfoItemStatus     :: PersistOpStatus
          , pfopInfoItemStatusDesc :: Text
-         , pfopInfoItemError :: Maybe Text
-         , pfopInfoItemHash :: EtagHash
-         , pfopInfoItemKey :: ResourceKey
-         , pfopInfoItemReturnOld :: Bool
+         , pfopInfoItemError      :: Maybe Text
+         , pfopInfoItemHash       :: Maybe EtagHash -- exists only when op is successful
+         , pfopInfoItemKey        :: Maybe ResourceKey  -- exists only when op is successful
+         , pfopInfoItemReturnOld  :: Bool
          }
   deriving (Show, Eq)
 
@@ -742,15 +742,9 @@ instance FromJSON PfopInfoItem where
                    <*> o .: "code"
                    <*> o .: "desc"
                    <*> fmap maybeNonNull (o .:? "error")
-                   <*> o .: "hash"
-                   <*> o .: "key"
+                   <*> o .:? "hash"
+                   <*> o .:? "key"
                    <*> (fmap (/= (0 :: Int)) $ o .: "returnOld")
-
-instance HasResourceKey PfopInfoItem where
-  getResourceKey = pfopInfoItemKey
-
-instance HasEtagHash PfopInfoItem where
-  getEtagHash = pfopInfoItemHash
 -- }}}1
 
 -- | 持久化处理状态查询
