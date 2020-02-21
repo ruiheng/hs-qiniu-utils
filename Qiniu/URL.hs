@@ -5,6 +5,7 @@ import ClassyPrelude
 import Control.Monad.State.Strict (execState, get, put)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Time.Clock.POSIX
+import qualified Data.Text as T
 
 import Qiniu.Types
 import Qiniu.PersistOps
@@ -95,7 +96,7 @@ resourceDownloadUrlX if_ssl m_domain (bucket, rkey) m_qs m_secret_cmds =
           flip execState (append_sep pre_url_no_scheme) $ do
             let fop_sep = "%7c" -- XXX: 不要直接使用 | ，因为有些库函数发送请求时自动会把它变成 %7c，就会出错
             forM_ cmds $ \ (fop, m_saveas) -> do
-              let fop_str = encodeFopToText fop
+              let fop_str = T.replace "|" "%7c" $ encodeFopToText fop
               s <- get
               let s' = if "?" `isSuffixOf` s
                           then s

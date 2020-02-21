@@ -110,7 +110,7 @@ encodeFopToText' x m_save_entry =
 newtype PersistFopSeries = PersistFopSeries { unPersistFopSeries :: NonEmpty SomePersistFop }
 
 instance PersistFop PersistFopSeries where
-  encodeFopToText (PersistFopSeries lst) = intercalate "%7c" $ map encodeFopToText $ toList lst
+  encodeFopToText (PersistFopSeries lst) = intercalate "|" $ map encodeFopToText $ toList lst
 
 
 data SaveAs = SaveAs
