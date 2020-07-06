@@ -12,6 +12,10 @@ import ClassyPrelude hiding (catch
                             , (<>)
 #endif
                             )
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
+#endif
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString            as B
 import qualified Data.Yaml                  as Y

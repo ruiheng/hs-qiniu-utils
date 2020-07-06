@@ -39,9 +39,15 @@ import           ClassyPrelude
 import           Control.Lens hiding (Choice)
 import           Control.Monad.Reader
 import           Control.Monad.Except (runExceptT, ExceptT(..))
+
 import           Data.Aeson
-import           Data.Aeson.TH (deriveJSON, fieldLabelModifier, defaultOptions)
-import           Data.Aeson.Types (camelTo2, typeMismatch)
+#if !MIN_VERSION_aeson(1, 4, 7)
+import           Data.Aeson.TH (defaultOptions, fieldLabelModifier)
+import           Data.Aeson.Types (camelTo2)
+#endif
+import           Data.Aeson.TH (deriveJSON)
+import           Data.Aeson.Types (typeMismatch)
+
 import           Data.Choice
 import           Data.Default (Default(..))
 import qualified Data.ByteString.Char8 as C8

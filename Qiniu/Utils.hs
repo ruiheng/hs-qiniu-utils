@@ -2,6 +2,11 @@ module Qiniu.Utils where
 
 -- {{{1 imports
 import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
+#endif
+
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Char8 as C8
 

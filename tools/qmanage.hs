@@ -10,6 +10,10 @@ import ClassyPrelude hiding (delete, try
                             , (<>)
 #endif
                             )
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
+#endif
 
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text.IO               as T
