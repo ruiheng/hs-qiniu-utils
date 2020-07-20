@@ -338,7 +338,7 @@ manageOpRemoteCall :: (ObjectManageOp o)
 manageOpRemoteCall op = runExceptT $ do
   sess <- lift $ lift ask
   (secret_key, access_key) <- ask
-  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path m_post_data defaults
+  opts <- liftIO $ applyAccessTokenPost secret_key access_key url_path m_post_data $ objManageOpOptions op
 
   resp <- ExceptT $ liftIO $ try $
     case m_post_data of
