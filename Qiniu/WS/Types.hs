@@ -145,7 +145,8 @@ respJsonGetByKey r k = do
 type WsResult a = Either HttpException (Either WsError a)
 
 -- | 这个类型方便统一处理两种错误
-type WsResultP a = Either (Either HttpException WsError) a
+type WsResultP a = Either WsErrorP a
+type WsErrorP = Either HttpException WsError
 
 
 -- | 文档把所有错误代码叫 http 状态码

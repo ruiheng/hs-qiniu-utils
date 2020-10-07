@@ -24,6 +24,7 @@ import System.IO                            (hSetBuffering)
 #endif
 import Control.Arrow                        (left)
 import Control.Monad.Logger
+import Control.Monad.Except (runExceptT)
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet, LoggerSet)
 import Control.Monad.Catch                  (try)
 
@@ -73,7 +74,7 @@ data Command = Stat Entry
             | Copy Entry Entry
             | Move Entry Entry
             | ChangeMime Entry ByteString
-            | List Bucket Text
+            | List Bucket ResourceKey
             | Fetch Text Scope
             deriving (Show)
 
@@ -88,7 +89,7 @@ parseCommandCml = subparser
   <> command "copy" (info (Copy <$> entry_arg <*> entry_arg) (progDesc "copy an entry to another"))
   <> command "move" (info (Move <$> entry_arg <*> entry_arg) (progDesc "move an entry"))
   <> command "change-mime" (info (ChangeMime <$> entry_arg <*> mime_arg) (progDesc "change mime type of an entry"))
-  <> command "list" (info (List <$> bucket_arg <*> argument auto (metavar "PREFIX")) (progDesc "list entries with specified prefix"))
+  <> command "list" (info (List <$> bucket_arg <*> fmap ResourceKey (argument auto (metavar "PREFIX"))) (progDesc "list entries with specified prefix"))
   <> command "fetch" (info (Fetch <$> argument auto (metavar "URL") <*> scope_arg) (progDesc "fetch file from URL into the Scope"))
   )
   where
@@ -156,7 +157,7 @@ parseCommand = do
             b <- p_bucket
             TP.spaces
             prefix <- p_maybe_quoted_s
-            return $ List b (fromString prefix)
+            return $ List b (ResourceKey $ fromString prefix)
 
         p_mime = p_maybe_quoted_s
 
@@ -230,7 +231,7 @@ processCmd (Move entry_from entry_to) = do
 processCmd (ChangeMime entry mime) = do
     chgm entry (Just mime) mempty mempty >>= printResult (const $ return ())
 processCmd (List bucket prefix) = do
-  (tryWsResult $ runConduit $ listSource bucket (Just 1) (Just "/") (Just prefix) .| CL.consume)
+  runExceptT (runConduit $ listSource bucket (Just 1) (Just "/") (Just prefix) .| CL.consume)
         >>= printResult f . unpackError
     where
         f s = liftIO $ do

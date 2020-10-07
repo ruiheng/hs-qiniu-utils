@@ -18,7 +18,7 @@ import qualified Data.ByteString.Char8 as C8
 import           Network.HTTP.Types (renderQueryText)
 
 -- import Control.Monad.Logger                 (MonadLogger, logDebugS, logInfoS)
-import           Control.Monad.Trans.Except (runExceptT, ExceptT(..))
+import           Control.Monad.Except (runExceptT, ExceptT(..), throwError)
 import           Network.Mime (MimeType)
 import           Network.Wreq (responseBody, defaults, param, Options)
 import           Network.Wreq.Types (Postable)
@@ -221,7 +221,7 @@ instance ObjectManageOp ObjChangeMeta where
 
 data ListItem =
        ListItem
-         { liKey      :: Text
+         { liKey      :: ResourceKey
          , liPutTime  :: ServerTimeStamp
          , liHash     :: EtagHash
          , liFsize    :: Int64
@@ -246,7 +246,7 @@ data ObjList = ObjList
                 Bucket
                 (Maybe Int)        -- limit
                 (Maybe Text)       -- delimiter
-                (Maybe Text)       -- prefix
+                (Maybe ResourceKey)       -- prefix
                 (Maybe Text)       -- marker
 
 instance ObjectManageOp ObjList where
@@ -260,7 +260,7 @@ instance ObjectManageOp ObjList where
     defaults
       & param "bucket" .~ [unBucket bucket]
       & fromMaybe id (flip fmap m_limit $ \ limit -> param "limit" .~ [ tshow $ min 1000 $ max 1 limit ])
-      & fromMaybe id (flip fmap m_prefix $ \ prefix -> param "prefix" .~ [prefix])
+      & fromMaybe id (flip fmap m_prefix $ \ (ResourceKey prefix) -> param "prefix" .~ [prefix])
       & fromMaybe id (flip fmap m_delimiter $ \ delimiter -> param "delimiter" .~ [delimiter])
       & fromMaybe id (flip fmap m_marker $ \ marker -> param "marker" .~ [marker])
 
@@ -476,7 +476,7 @@ alreadyExistsAndMatch' entry get_local_etag = do
 list :: Bucket
      -> Maybe Int          -- ^ limit
      -> Maybe Text       -- ^ delimiter
-     -> Maybe Text       -- ^ prefix
+     -> Maybe ResourceKey       -- ^ prefix
      -> Maybe Text       -- ^ marker
      -> QiniuManageMonad m (WsResult ListResult)
 -- {{{1
@@ -489,11 +489,11 @@ listSource :: (QiniuRemoteCallMonad m, ExcSafe.MonadCatch m)
            => Bucket
            -> Maybe Int          -- ^ limit
            -> Maybe Text       -- ^ delimiter
-           -> Maybe Text       -- ^ prefix
+           -> Maybe ResourceKey       -- ^ prefix
 #if MIN_VERSION_conduit(1, 3, 0)
-           -> ConduitT () ListResult (ReaderT (SecretKey, AccessKey) m) ()
+           -> ConduitT () ListItem (ExceptT WsErrorP (ReaderT (SecretKey, AccessKey) m)) ()
 #else
-           -> Source (ReaderT (SecretKey, AccessKey) m) ListResult
+           -> Source (ExceptT WsErrorP (ReaderT (SecretKey, AccessKey) m)) ListItem
 #endif
             -- ^ may throw HttpException or WsError
 -- {{{1
@@ -504,9 +504,9 @@ listSource bucket limit delimiter prefix = do
     nothing_or_null = fromMaybe True . fmap null
 
     go marker = do
-      lr <- lift (list bucket limit delimiter prefix marker)
-            >>= either (liftIO . either throwIO throwIO) return . packError
-      yield lr
+      lr <- lift (lift $ fmap packError $ list bucket limit delimiter prefix marker)
+            >>= either throwError return
+      mapM_ yield $ lrItems lr
       let new_marker = lrMarker lr
       if nothing_or_null new_marker
         then return ()
