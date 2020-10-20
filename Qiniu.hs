@@ -6,6 +6,7 @@ module Qiniu
     , module Qiniu.Upload
     , module Qiniu.Manage
     , module Qiniu.PersistOps
+    , module Qiniu.PersistOps.AudioVideo
     , module Qiniu.URL
     , module Qiniu.Error
     , module Qiniu.Config
@@ -22,6 +23,7 @@ import Qiniu.ByteString
 import Qiniu.Upload
 import Qiniu.Manage
 import Qiniu.PersistOps
+import Qiniu.PersistOps.AudioVideo
 import Qiniu.URL
 import Qiniu.Error
 import Qiniu.Config
