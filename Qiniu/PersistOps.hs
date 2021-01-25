@@ -16,7 +16,7 @@ module Qiniu.PersistOps
   , persistOpStatusSucceeded
   , persistOpStatusInProgress
   , PersistOpInfo(..)
-  , PfopInfoItem(..)
+  , PfopInfoItem(..), PfopInfoItem'(..)
   , persistOpsOnSaved
   , persistOpsQuery
   ) where
@@ -418,6 +418,11 @@ instance FromJSON PfopInfoItem where
                    <*> o .:? "key"
                    <*> (fmap (/= (0 :: Int)) $ o .: "returnOld")
 -- }}}1
+
+
+-- | 检查过可选字段，确定有值的情况
+data PfopInfoItem' = PfopInfoItem' PfopInfoItem EtagHash ResourceKey
+
 
 -- | 持久化处理状态查询
 persistOpsQuery :: PersistentId
