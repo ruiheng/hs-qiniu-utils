@@ -14,6 +14,7 @@ import           Database.Persist.Sql (PersistFieldSql)
 import           Data.Aeson (FromJSON, ToJSON, toJSON)
 import           Network.URI (escapeURIString)
 import           Network.HTTP (urlEncode)
+import           Web.PathPieces (PathPiece(..))
 
 import Qiniu.Utils
 -- }}}1
@@ -80,6 +81,10 @@ newtype EtagHash = EtagHash { unEtagHash :: Text }
 
 instance Byteable EtagHash where
   toBytes = encodeUtf8 . unEtagHash
+
+instance PathPiece EtagHash where
+  toPathPiece = unEtagHash
+  fromPathPiece = fmap EtagHash . fromPathPiece
 
 
 -- | 持久化数据处理的队列
