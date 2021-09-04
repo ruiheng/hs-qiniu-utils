@@ -202,16 +202,16 @@ instance ObjectManageOp ObjChangeMeta where
       cond_to_kv (MatchPutTime t)   = ("putTime", tshow (intServerTimeStamp t))
 
       others = mconcat $ catMaybes
-                [ flip fmap m_mime $ \ mime -> "/mime/" <> B64U.encode mime
+                [ flip fmap m_mime $ \ mime -> "/mime/" <> B64U.encodeBase64' mime
                 , if null custom_kvs
                      then Nothing
                      else Just $ mconcat $
                        flip map (mapToList custom_kvs) $ \ (k, v) ->
-                         "/x-qn-meta-" <> encodeUtf8 k <> "/" <> B64U.encode (encodeUtf8 v)
+                         "/x-qn-meta-" <> encodeUtf8 k <> "/" <> B64U.encodeBase64' (encodeUtf8 v)
                 , if null conds
                      then Nothing
                      else Just $ "/cond/"
-                          <> B64U.encode
+                          <> B64U.encodeBase64'
                               (toStrict $ BB.toLazyByteString $
                                 renderQueryText False $
                                   map (second Just . cond_to_kv) conds)
@@ -280,7 +280,7 @@ instance ObjectManageOp ObjFetch where
   type ObjectManageOpResult ObjFetch = UploadedFileInfo
 
   objManageOpUrlPath (ObjFetch url_from scope_to) =
-    "/fetch/" <> B64U.encode (encodeUtf8 url_from)
+    "/fetch/" <> B64U.encodeBase64' (encodeUtf8 url_from)
                <> "/to/" <> encodedScopeUri scope_to
 
   objManageApiUrl _ url_path = "http://iovip.qbox.me" <> url_path

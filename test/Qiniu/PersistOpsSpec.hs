@@ -17,11 +17,11 @@ spec = do
     let fop1 = SomePersistFop $ (runReader def (ImageView2Mode1MinSize, ImageView2DimX 400) :: ImageView2)
 
     it "returns correct result for input 1" $ do
-      encodeFopCmdList [(fop1, Nothing)] `shouldBe` "imageView2/1/w/400"
+      encodeFopCmdList (pure (fop1, Nothing)) `shouldBe` "imageView2/1/w/400"
 
     it "returns correct result for input 2" $ do
       let save_as = SaveAs saveas_entry Nothing
-      encodeFopCmdList [(fop1, Just save_as)] `shouldBe` "imageView2/1/w/400|saveas/c2F2ZV90b19idWNrZXQ6c2F2ZV90b19ya2V5"
+      encodeFopCmdList (pure (fop1, Just save_as)) `shouldBe` "imageView2/1/w/400|saveas/c2F2ZV90b19idWNrZXQ6c2F2ZV90b19ya2V5"
 
   describe "VFrameOp" $ do
     it "can be encodeFopToText'ed correctly" $ do

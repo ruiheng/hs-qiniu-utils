@@ -47,7 +47,7 @@ data Scope = Scope Bucket (Maybe ResourceKey)
 encodedScopeUri :: Scope -> ByteString
 -- {{{1
 encodedScopeUri (Scope bucket m_key) =
-    B64U.encode $ encodeUtf8 $ unBucket bucket <>
+    B64U.encodeBase64' $ encodeUtf8 $ unBucket bucket <>
                     case m_key of
                         Just key -> ":" <> unResourceKey key
                         Nothing -> ""

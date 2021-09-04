@@ -28,7 +28,7 @@ sign :: SecretKey -> ByteString -> ByteString
 sign = hmac SHA1.hash 64 . encodeUtf8 . unSecretKey
 
 encodedSign :: SecretKey -> ByteString -> ByteString
-encodedSign skey = B64U.encode . sign skey
+encodedSign skey = B64U.encodeBase64' . sign skey
 
 encodedSign' :: IsString s => SecretKey -> ByteString -> s
 encodedSign' skey = fromString . C8.unpack . encodedSign skey

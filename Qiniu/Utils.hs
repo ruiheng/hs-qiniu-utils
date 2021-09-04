@@ -57,7 +57,7 @@ instance ToJSON ServerTimeStamp where
 
 
 base64UrlEncode :: IsString s => ByteString -> s
-base64UrlEncode = fromString . C8.unpack . B64U.encode
+base64UrlEncode = fromString . C8.unpack . B64U.encodeBase64'
 
 base64UrlEncodeT :: IsString s => Text -> s
 base64UrlEncodeT = base64UrlEncode . encodeUtf8

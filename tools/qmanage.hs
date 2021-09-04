@@ -18,7 +18,7 @@ import Control.Monad (MonadFail(..))
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text.IO               as T
 import Options.Applicative
-import System.IO                            (BufferMode(..))
+-- import System.IO                            (BufferMode(..))
 #if !MIN_VERSION_classy_prelude(1, 5, 0)
 import System.IO                            (hSetBuffering)
 #endif

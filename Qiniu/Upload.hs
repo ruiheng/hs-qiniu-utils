@@ -183,7 +183,7 @@ uploadToken skey akey pp =
         , decodeLatin1 $ encoded_pp
         ]
     where
-        encoded_pp = B64U.encode $ LB.toStrict $ A.encode pp
+        encoded_pp = B64U.encodeBase64' $ LB.toStrict $ A.encode pp
         encoded_sign = decodeLatin1 $ encodedSign skey encoded_pp
 -- }}}1
 

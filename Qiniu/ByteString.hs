@@ -7,7 +7,6 @@ import           Data.Bits                  ((.|.))
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.ByteString.Lazy       as LB
-import           Data.Text.Encoding         (decodeLatin1)
 
 import Qiniu.Types
 -- }}}1
@@ -21,7 +20,7 @@ hetagChunkSize = 2 ^ hetagChunkBits
 
 hetag :: ByteString -> EtagHash
 -- {{{1
-hetag bs = EtagHash $ decodeLatin1 $ B64U.encode $
+hetag bs = EtagHash $ B64U.encodeBase64 $
     if B.length bs <= hetagChunkSize
         then B.cons flag $ SHA1.hash bs
         else B.cons (flag .|. 0x80) $ SHA1.hash $ go bs
@@ -39,7 +38,7 @@ hetag bs = EtagHash $ decodeLatin1 $ B64U.encode $
 -- | lazy version of hetag
 hetagL :: LB.ByteString -> EtagHash
 -- {{{1
-hetagL bs = EtagHash $ decodeLatin1 $ B64U.encode $
+hetagL bs = EtagHash $ B64U.encodeBase64 $
     if LB.length bs <= fromIntegral hetagChunkSize
         then B.cons flag $ SHA1.hashlazy bs
         else B.cons (flag .|. 0x80) $ SHA1.hash $ go bs

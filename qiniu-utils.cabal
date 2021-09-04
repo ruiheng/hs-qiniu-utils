@@ -80,7 +80,7 @@ library
                      , classy-prelude
                      , containers
                      , bytestring
-                     , base64-bytestring
+                     , base64
                      , cryptohash
                      , aeson
                      , time
@@ -104,7 +104,7 @@ library
                      , conduit
                      , binary
                      , byteable
-                     , base16-bytestring
+                     , base16
                      , mime-types
                      , choice
                      , path-pieces
@@ -188,8 +188,8 @@ test-suite test
     build-depends:     base
                      , classy-prelude
                      , bytestring
-                     , base64-bytestring
-                     , base16-bytestring
+                     , base64
+                     , base16
                      , aeson
                      , qiniu-utils
 
