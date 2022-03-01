@@ -286,7 +286,7 @@ data AvInfoFormat =
     , avInfoFormatFormatLongName :: Text
     , avInfoFormatFormatName     :: Text
     , avInfoFormatNbStreams      :: StrNumber Int
-    , avInfoFormatSize           :: StrNumber Int
+    , avInfoFormatSize           :: StrNumber Int64
     , avInfoFormatStartTime      :: StrNumber Float
     , avInfoFormatTags           :: Map Text Text
     }
@@ -339,6 +339,13 @@ instance FromJSON (MaybeMagic AvInfo) where
 
   parseJSON x = typeMismatch "AvInfo object" x
 
+
+-- | PFOP 接口命令: avinfo
+-- 这个命令的返回报文格式未找到明确的文档，文档只有一个用例
+data AvInfo' = AvInfo'
+
+instance PersistFop AvInfo' where
+  encodeFopToText AvInfo' = "avinfo"
 
 
 
